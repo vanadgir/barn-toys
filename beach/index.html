@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>barn's beach</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; background: #0a1628; }
+    canvas { display: block; }
+    #label {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-family: monospace;
+      font-size: 0.75rem;
+      color: rgba(255,255,255,0.35);
+      letter-spacing: 0.1em;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+<div id="label">drag to look around · scroll to zoom</div>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/",
+    "three/addons/utils/BufferGeometryUtils.js": "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/utils/BufferGeometryUtils.js"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x6ab4e8);
+scene.fog = new THREE.FogExp2(0x87ceeb, 0.018);
+
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 200);
+camera.position.set(0, 7, 16);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 0.5, 0);
+controls.maxPolarAngle = Math.PI * 0.46;
+controls.minDistance = 4;
+controls.maxDistance = 35;
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+
+// lighting
+const sun = new THREE.DirectionalLight(0xfff4d0, 2.2);
+sun.position.set(15, 25, 10);
+sun.castShadow = true;
+sun.shadow.mapSize.width = 2048;
+sun.shadow.mapSize.height = 2048;
+sun.shadow.camera.near = 0.5;
+sun.shadow.camera.far = 80;
+sun.shadow.camera.left = -20;
+sun.shadow.camera.right = 20;
+sun.shadow.camera.top = 20;
+sun.shadow.camera.bottom = -20;
+scene.add(sun);
+
+const fillLight = new THREE.HemisphereLight(0x88c0f0, 0xd4a850, 0.7);
+scene.add(fillLight);
+
+// ── WATER ──────────────────────────────────────────
+const waterVert = `
+  uniform float time;
+  varying vec2 vUv;
+  varying vec3 vWorldPos;
+
+  void main() {
+    vUv = uv;
+    vec3 pos = position;
+    float r = length(pos.xz);
+    float wave =
+      sin(pos.x * 1.1 + time * 1.6) * 0.14 +
+      sin(pos.z * 0.85 + time * 1.2) * 0.11 +
+      sin((pos.x + pos.z) * 0.65 + time * 2.1) * 0.06 +
+      sin(r * 0.4 - time * 1.0) * 0.08;
+    pos.y += wave;
+    vWorldPos = pos;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+  }
+`;
+
+const waterFrag = `
+  uniform float time;
+  varying vec2 vUv;
+  varying vec3 vWorldPos;
+
+  void main() {
+    float r = length(vWorldPos.xz);
+    float t = clamp(r / 20.0, 0.0, 1.0);
+    vec3 shallow = vec3(0.22, 0.78, 0.82);
+    vec3 deep    = vec3(0.04, 0.18, 0.52);
+    vec3 col = mix(shallow, deep, t);
+
+    // sparkle
+    float spark = pow(max(0.0, sin(vWorldPos.x * 4.3 + time * 3.0) * sin(vWorldPos.z * 3.7 + time * 2.5)), 8.0);
+    col += spark * 0.5;
+
+    // shore foam
+    float foam = smoothstep(3.8, 4.5, r) * (1.0 - smoothstep(4.5, 5.2, r));
+    foam *= (sin(vWorldPos.x * 6.0 + time * 2.2) * 0.5 + 0.5);
+    col = mix(col, vec3(1.0), foam * 0.6);
+
+    float alpha = mix(0.92, 0.82, t);
+    gl_FragColor = vec4(col, alpha);
+  }
+`;
+
+const waterUniforms = { time: { value: 0 } };
+const waterMat = new THREE.ShaderMaterial({
+  vertexShader: waterVert,
+  fragmentShader: waterFrag,
+  uniforms: waterUniforms,
+  transparent: true,
+  side: THREE.DoubleSide,
+});
+const waterGeo = new THREE.PlaneGeometry(70, 70, 100, 100);
+waterGeo.rotateX(-Math.PI / 2);
+const water = new THREE.Mesh(waterGeo, waterMat);
+water.position.y = 0.05;
+scene.add(water);
+
+// ── ISLAND ─────────────────────────────────────────
+function makeIsland() {
+  const geo = new THREE.CylinderGeometry(4.2, 3.6, 1.4, 36, 8);
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    const z = pos.getZ(i);
+    const r = Math.sqrt(x * x + z * z);
+    if (y > -0.3) {
+      const bump =
+        Math.sin(x * 1.8 + 0.3) * Math.cos(z * 1.4 + 0.5) * 0.3 +
+        Math.sin(x * 3.1 + z * 2.3) * 0.1 +
+        (Math.random() - 0.5) * 0.08;
+      const falloff = 1.0 - Math.pow(r / 4.5, 2);
+      pos.setY(i, y + bump * Math.max(0, falloff));
+    }
+  }
+  const merged = mergeVertices(geo, 0.001);
+  merged.computeVertexNormals();
+  const mat = new THREE.MeshLambertMaterial({ color: 0xd4a045 });
+  const mesh = new THREE.Mesh(merged, mat);
+  mesh.receiveShadow = true;
+  mesh.castShadow = true;
+  mesh.position.y = 0.3;
+  return mesh;
+}
+scene.add(makeIsland());
+
+// small rocks
+function makeRock(x, z, scale = 1) {
+  const geo = new THREE.DodecahedronGeometry(0.22 * scale, 0);
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    pos.setX(i, pos.getX(i) + (Math.random() - 0.5) * 0.05);
+    pos.setY(i, pos.getY(i) + (Math.random() - 0.5) * 0.05);
+    pos.setZ(i, pos.getZ(i) + (Math.random() - 0.5) * 0.05);
+  }
+  geo.computeVertexNormals();
+  const mat = new THREE.MeshLambertMaterial({ color: 0x8a8070 });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(x, 0.8, z);
+  mesh.castShadow = true;
+  mesh.rotation.set(Math.random(), Math.random(), Math.random());
+  return mesh;
+}
+scene.add(makeRock(2.8, 1.5, 1.2));
+scene.add(makeRock(-3.0, 2.0, 0.8));
+scene.add(makeRock(1.5, -3.2, 1.0));
+scene.add(makeRock(-2.2, -2.0, 0.6));
+
+// ── PALM TREE ──────────────────────────────────────
+function makePalmTree(x, z, lean = 0.12, leanDir = 0) {
+  const group = new THREE.Group();
+
+  const trunkMat = new THREE.MeshLambertMaterial({ color: 0x6b4c2a });
+  const segments = 7;
+  let py = 0;
+  let px = 0;
+  let pz = 0;
+  for (let s = 0; s < segments; s++) {
+    const t = s / segments;
+    const r = 0.18 - t * 0.07;
+    const geo = new THREE.CylinderGeometry(r * 0.9, r, 0.65, 7);
+    const seg = new THREE.Mesh(geo, trunkMat);
+    seg.position.set(px, py + 0.325, pz);
+    seg.rotation.z = lean * Math.sin(leanDir) + Math.sin(s * 1.1) * 0.02;
+    seg.rotation.x = lean * Math.cos(leanDir) + Math.sin(s * 0.9) * 0.02;
+    seg.castShadow = true;
+    group.add(seg);
+    py += 0.6;
+    px += Math.sin(leanDir) * lean * 0.2;
+    pz += Math.cos(leanDir) * lean * 0.2;
+  }
+  const topY = py;
+  const topX = px;
+  const topZ = pz;
+
+  const leafMat = new THREE.MeshLambertMaterial({ color: 0x2a7a1a, side: THREE.DoubleSide });
+  const leafCount = 8;
+  for (let i = 0; i < leafCount; i++) {
+    const angle = (i / leafCount) * Math.PI * 2;
+    const leafGeo = new THREE.ConeGeometry(0.12, 2.2, 4);
+    const leaf = new THREE.Mesh(leafGeo, leafMat);
+    leaf.position.set(topX + Math.cos(angle) * 0.55, topY + 0.3, topZ + Math.sin(angle) * 0.55);
+    leaf.rotation.z = Math.cos(angle) * 1.0 + Math.PI * 0.05;
+    leaf.rotation.x = Math.sin(angle) * 1.0;
+    leaf.castShadow = true;
+    group.add(leaf);
+  }
+  // top leaf
+  const topLeafGeo = new THREE.ConeGeometry(0.1, 1.5, 4);
+  const topLeaf = new THREE.Mesh(topLeafGeo, leafMat);
+  topLeaf.position.set(topX, topY + 1.0, topZ);
+  group.add(topLeaf);
+
+  // coconuts
+  const coconutMat = new THREE.MeshLambertMaterial({ color: 0x3d2810 });
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2;
+    const cGeo = new THREE.SphereGeometry(0.16, 6, 5);
+    const c = new THREE.Mesh(cGeo, coconutMat);
+    c.position.set(topX + Math.cos(a) * 0.22, topY + 0.05, topZ + Math.sin(a) * 0.22);
+    group.add(c);
+  }
+
+  group.position.set(x, 0.65, z);
+  return group;
+}
+scene.add(makePalmTree(-0.8, -1.2, 0.13, 2.3));
+scene.add(makePalmTree(1.4, 0.8, 0.10, 0.8));
+
+// ── CRAB ───────────────────────────────────────────
+function makeCrab(bodyColor = 0xd04010) {
+  const group = new THREE.Group();
+  const bodyMat = new THREE.MeshLambertMaterial({ color: bodyColor });
+  const darkMat = new THREE.MeshLambertMaterial({ color: 0x111111 });
+  const clawMat = new THREE.MeshLambertMaterial({ color: new THREE.Color(bodyColor).offsetHSL(0, 0, -0.1) });
+
+  // body - slightly domed box
+  const bodyGeo = new THREE.BoxGeometry(0.55, 0.2, 0.4);
+  const body = new THREE.Mesh(bodyGeo, bodyMat);
+  body.castShadow = true;
+  group.add(body);
+
+  // eyes on stalks
+  for (const s of [-1, 1]) {
+    const stalkGeo = new THREE.CylinderGeometry(0.025, 0.025, 0.12, 4);
+    const stalk = new THREE.Mesh(stalkGeo, bodyMat);
+    stalk.position.set(s * 0.12, 0.15, -0.16);
+    stalk.rotation.x = -0.3;
+    group.add(stalk);
+    const eyeGeo = new THREE.SphereGeometry(0.055, 6, 5);
+    const eye = new THREE.Mesh(eyeGeo, darkMat);
+    eye.position.set(s * 0.12, 0.22, -0.20);
+    group.add(eye);
+  }
+
+  // claws
+  for (const s of [-1, 1]) {
+    const clawGroup = new THREE.Group();
+    const armGeo = new THREE.CylinderGeometry(0.03, 0.03, 0.25, 4);
+    const arm = new THREE.Mesh(armGeo, clawMat);
+    arm.rotation.z = s * 1.3;
+    arm.position.set(s * 0.14, 0, 0);
+    clawGroup.add(arm);
+    const pinchGeo = new THREE.BoxGeometry(0.17, 0.1, 0.08);
+    const pinch = new THREE.Mesh(pinchGeo, clawMat);
+    pinch.position.set(s * 0.27, 0.04, -0.04);
+    clawGroup.add(pinch);
+    clawGroup.position.set(s * 0.25, -0.04, -0.15);
+    group.add(clawGroup);
+  }
+
+  // legs - 3 pairs
+  const legs = [];
+  for (const s of [-1, 1]) {
+    for (let l = 0; l < 3; l++) {
+      const legGeo = new THREE.CylinderGeometry(0.022, 0.022, 0.38, 4);
+      const leg = new THREE.Mesh(legGeo, bodyMat);
+      leg.position.set(s * 0.3, -0.08, -0.04 + l * 0.12);
+      leg.rotation.z = s * 0.8;
+      leg.rotation.x = 0.1 * l;
+      leg.castShadow = true;
+      group.add(leg);
+      legs.push({ mesh: leg, side: s, phase: l * 1.2 });
+    }
+  }
+
+  group.userData.legs = legs;
+  return group;
+}
+
+const crabs = [];
+const crabDefs = [
+  { r: 2.3, speed: 0.28, color: 0xd04010, startAngle: 0.0 },
+  { r: 2.8, speed: -0.22, color: 0xb82800, startAngle: 2.1 },
+  { r: 1.9, speed: 0.35, color: 0xe06020, startAngle: 4.3 },
+];
+for (const def of crabDefs) {
+  const crab = makeCrab(def.color);
+  crab.userData.r = def.r;
+  crab.userData.speed = def.speed;
+  crab.userData.angle = def.startAngle;
+  crab.position.set(
+    Math.cos(def.startAngle) * def.r,
+    1.18,
+    Math.sin(def.startAngle) * def.r
+  );
+  scene.add(crab);
+  crabs.push(crab);
+}
+
+// ── CLOUDS ─────────────────────────────────────────
+function makeCloud(x, y, z, scale = 1) {
+  const group = new THREE.Group();
+  const mat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  const blobs = [
+    [0, 0, 0, 0.9], [0.8, 0.1, 0, 0.7], [-0.7, 0.05, 0, 0.65],
+    [0.3, 0.4, 0.2, 0.5], [-0.2, 0.35, -0.2, 0.45],
+  ];
+  for (const [bx, by, bz, bs] of blobs) {
+    const geo = new THREE.SphereGeometry(bs * scale, 7, 6);
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(bx * scale, by * scale, bz * scale);
+    group.add(m);
+  }
+  group.position.set(x, y, z);
+  group.userData.isCloud = true;
+  return group;
+}
+const clouds = [
+  makeCloud(-10, 10, -14, 1.1),
+  makeCloud(8, 11, -16, 0.85),
+  makeCloud(-2, 12, -10, 0.95),
+  makeCloud(14, 9, -8, 0.75),
+  makeCloud(-16, 10, -5, 1.0),
+];
+clouds.forEach(c => scene.add(c));
+
+// ── BIRDS (simple v-shapes) ─────────────────────────
+const birdMat = new THREE.LineBasicMaterial({ color: 0x222222 });
+const birds = [];
+for (let i = 0; i < 5; i++) {
+  const pts = [
+    new THREE.Vector3(-0.3, 0, 0),
+    new THREE.Vector3(0, 0.08, 0),
+    new THREE.Vector3(0.3, 0, 0),
+  ];
+  const geo = new THREE.BufferGeometry().setFromPoints(pts);
+  const bird = new THREE.Line(geo, birdMat);
+  bird.position.set(
+    (Math.random() - 0.5) * 30,
+    9 + Math.random() * 4,
+    (Math.random() - 0.5) * 20 - 5
+  );
+  bird.userData.speed = 0.8 + Math.random() * 0.6;
+  bird.userData.bobPhase = Math.random() * Math.PI * 2;
+  scene.add(bird);
+  birds.push(bird);
+}
+
+// ── RESIZE ─────────────────────────────────────────
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ── ANIMATE ────────────────────────────────────────
+let t = 0;
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = 0.016;
+  t += dt;
+
+  waterUniforms.time.value = t;
+
+  // crabs orbit
+  for (const crab of crabs) {
+    crab.userData.angle += crab.userData.speed * dt;
+    const a = crab.userData.angle;
+    const r = crab.userData.r;
+    crab.position.x = Math.cos(a) * r;
+    crab.position.z = Math.sin(a) * r;
+    crab.position.y = 1.18 + Math.sin(t * 7 + a * 2) * 0.03;
+    // face direction of travel
+    const facing = crab.userData.speed > 0 ? a + Math.PI / 2 : a - Math.PI / 2;
+    crab.rotation.y = -facing;
+    // leg wiggle
+    for (const legData of crab.userData.legs) {
+      legData.mesh.rotation.z = legData.side * (0.8 + Math.sin(t * 9 + legData.phase) * 0.25);
+    }
+  }
+
+  // clouds drift
+  for (const cloud of clouds) {
+    cloud.position.x += 0.006;
+    if (cloud.position.x > 25) cloud.position.x = -25;
+  }
+
+  // birds glide
+  for (const bird of birds) {
+    bird.position.x += bird.userData.speed * dt;
+    bird.position.y += Math.sin(t * 1.2 + bird.userData.bobPhase) * 0.003;
+    if (bird.position.x > 25) bird.position.x = -25;
+  }
+
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>
