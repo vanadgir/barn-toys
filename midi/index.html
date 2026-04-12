@@ -680,6 +680,70 @@
 
     /* import hidden input */
     #ed-import-file { display: none; }
+
+    /* ═══════════════════════════════════════════════════════════════
+       COLLAB TAB
+       ═══════════════════════════════════════════════════════════════ */
+
+    .cb-lobby {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .cb-lobby-inner {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      align-items: center;
+    }
+    .cb-lobby-title {
+      font-size: 0.6rem;
+      color: var(--muted);
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+    .cb-lobby-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .cb-error {
+      font-size: 0.6rem;
+      color: #c84b4b;
+      min-height: 1.2em;
+      text-align: center;
+    }
+    .cb-room {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .cb-room-code-label {
+      font-size: 0.75rem;
+      color: var(--accent);
+      font-weight: 700;
+      letter-spacing: 0.18em;
+    }
+    .cb-user-pill {
+      font-size: 0.55rem;
+      font-family: 'IBM Plex Mono', monospace;
+      color: var(--text);
+      padding: 2px 8px;
+      border-radius: 3px;
+      border: 1px solid;
+      white-space: nowrap;
+      letter-spacing: 0.04em;
+    }
+    .cb-user-pill.is-host::before { content: '★ '; }
+    .cb-users-wrap {
+      display: flex;
+      gap: 5px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-left: auto;
+    }
   </style>
 </head>
 <body>
@@ -693,6 +757,7 @@
 <div class="tab-bar">
   <button class="tab-btn active" id="tab-editor-btn" onclick="switchTab('editor')">editor</button>
   <button class="tab-btn" id="tab-live-btn" onclick="switchTab('live')">live</button>
+  <button class="tab-btn" id="tab-collab-btn" onclick="switchTab('collab')">collab</button>
 </div>
 
 <div class="note-tip" id="note-tip">
@@ -804,6 +869,73 @@
       <div>notes: <span id="ed-note-count">0</span></div>
       <div id="ed-loop-info"></div>
       <div id="ed-status" style="margin-left:auto"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══ COLLAB TAB ═══ -->
+<div class="tab-panel" id="panel-collab">
+  <div class="editor-panel">
+
+    <!-- lobby (pre-room) -->
+    <div class="cb-lobby" id="cb-lobby">
+      <div class="cb-lobby-inner">
+        <div class="cb-lobby-title">collab session</div>
+        <div class="cb-lobby-row">
+          <span class="ed-label">name</span>
+          <input id="cb-name-input" class="ed-input" placeholder="your name" style="width:130px;cursor:text" maxlength="20">
+        </div>
+        <div class="cb-lobby-row" style="gap:16px">
+          <button class="ed-btn primary" onclick="cbCreate()">create room</button>
+          <div style="display:flex;gap:6px;align-items:center">
+            <input id="cb-code-input" class="ed-input" placeholder="0000" style="width:60px;text-align:center;letter-spacing:0.2em;cursor:text" maxlength="4">
+            <button class="ed-btn" onclick="cbJoin()">join</button>
+          </div>
+        </div>
+        <div class="cb-error" id="cb-error"></div>
+      </div>
+    </div>
+
+    <!-- room view (post-join) -->
+    <div class="cb-room" id="cb-room" style="display:none">
+
+      <!-- toolbar -->
+      <div class="ed-toolbar">
+        <div class="ed-group">
+          <span class="ed-label">room</span>
+          <span class="cb-room-code-label" id="cb-room-code"></span>
+        </div>
+        <div class="ed-sep"></div>
+        <div class="ed-group">
+          <span class="ed-label">bpm</span>
+          <input type="number" id="cb-bpm" class="ed-input" min="40" max="280" value="120" onchange="cbSendBpm()">
+        </div>
+        <button class="ed-btn primary" id="cb-play-btn" onclick="cbPlay()">▶ play</button>
+        <button class="ed-btn stop" id="cb-stop-btn" onclick="cbStop()">■ stop</button>
+        <div class="ed-sep"></div>
+        <button class="ed-btn danger" onclick="cbClearAll()">clear all</button>
+        <div class="ed-sep"></div>
+        <button class="ed-btn" onclick="cbLeave()">leave</button>
+        <div class="cb-users-wrap" id="cb-users"></div>
+      </div>
+
+      <!-- piano roll -->
+      <div class="ed-main">
+        <div class="ed-keys" id="cb-keys"></div>
+        <div class="ed-roll-wrap" id="cb-roll-wrap">
+          <div class="ed-roll-inner" id="cb-roll-inner">
+            <div class="ed-playhead" id="cb-playhead"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- footer -->
+      <div class="ed-ftr">
+        <div>notes: <span id="cb-note-count">0</span></div>
+        <div id="cb-status" style="margin-left:auto"></div>
+      </div>
+
     </div>
 
   </div>
@@ -980,11 +1112,15 @@ function switchTab(tab) {
   activeTab = tab;
   document.getElementById('tab-live-btn').classList.toggle('active', tab === 'live');
   document.getElementById('tab-editor-btn').classList.toggle('active', tab === 'editor');
+  document.getElementById('tab-collab-btn').classList.toggle('active', tab === 'collab');
   document.getElementById('panel-live').classList.toggle('active', tab === 'live');
   document.getElementById('panel-editor').classList.toggle('active', tab === 'editor');
+  document.getElementById('panel-collab').classList.toggle('active', tab === 'collab');
   // auto-mute live audio when leaving the live tab
   if (tab === 'editor' && !isMuted) toggleMute();
   if (tab === 'live'   &&  isMuted) toggleMute();
+  // build collab grid if switching to it and in a room
+  if (tab === 'collab' && cbInRoom) buildCbGrid(cbSteps);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2183,6 +2319,256 @@ function edImportMidi(input) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// COLLAB TAB
+// ─────────────────────────────────────────────────────────────────────────────
+let cbInRoom      = false;
+let cbRoomCode    = null;
+let cbIsHost      = false;
+let cbMyColorIdx  = 0;
+let cbNotes       = [];       // [{note, step, duration, velocity, user_idx}]
+let cbCellMap     = new Map(); // 'row-step' → cell DOM element
+let cbBuilt       = 0;
+let cbBpm         = 120;
+let cbSteps       = 32;
+let cbStepBeats   = 0.5;
+let cbAudioSource = null;
+let cbIsPlaying   = false;
+
+function cbGetSpb() {
+  // steps per bar (4/4 time)
+  return Math.round(1 / cbStepBeats) * 2;
+}
+
+function buildCbKeys() {
+  const el = document.getElementById('cb-keys');
+  if (!el || el.children.length) return;
+  NOTES.forEach(midi => {
+    const key = document.createElement('div');
+    key.className = 'key' + (isBlack(midi) ? ' black' : ' white') + (midi % 12 === 0 ? ' c' : '');
+    if (midi % 12 === 0) key.textContent = noteName(midi);
+    el.appendChild(key);
+  });
+}
+
+function buildCbGrid(steps) {
+  if (steps === cbBuilt && cbCellMap.size > 0) return;
+  cbBuilt = steps;
+  cbCellMap.clear();
+  const inner = document.getElementById('cb-roll-inner');
+  inner.querySelectorAll('.ed-row').forEach(r => r.remove());
+  const spb  = cbGetSpb();
+  const frag = document.createDocumentFragment();
+  NOTES.forEach((midi, row) => {
+    const rowEl = document.createElement('div');
+    rowEl.className = `ed-row${isBlack(midi) ? ' is-black' : ''}`;
+    for (let s = 0; s < steps; s++) {
+      const cell = document.createElement('div');
+      const cls  = s % spb === 0 ? 'bar-start' : (s % Math.max(1, Math.round(spb / 2)) === 0 ? 'beat-start' : '');
+      cell.className = 'ed-cell' + (cls ? ' ' + cls : '');
+      cell.dataset.midi = midi;
+      cell.addEventListener('click', () => cbCellClick(midi, s));
+      cbCellMap.set(`${row}-${s}`, cell);
+      rowEl.appendChild(cell);
+    }
+    frag.appendChild(rowEl);
+  });
+  const ph = document.getElementById('cb-playhead');
+  inner.insertBefore(frag, ph);
+  cbRefreshGrid();
+}
+
+function cbCellClick(midi, step) {
+  if (!cbInRoom || !wsReady) return;
+  const existing = cbNotes.find(n => n.note === midi && step >= n.step && step < n.step + (n.duration || 1));
+  if (existing) {
+    ws.send(JSON.stringify({ type: 'collab_note', action: 'remove', note: existing.note, step: existing.step }));
+  } else {
+    ws.send(JSON.stringify({ type: 'collab_note', action: 'add', note: midi, step, duration: 1, velocity: 90 }));
+  }
+}
+
+function cbRefreshGrid() {
+  cbCellMap.forEach(cell => { cell.classList.remove('ed-on'); delete cell.dataset.layer; });
+  cbNotes.forEach(n => {
+    const row = edRowMap.get(n.note);
+    if (row == null) return;
+    for (let d = 0; d < (n.duration || 1); d++) {
+      const cell = cbCellMap.get(`${row}-${n.step + d}`);
+      if (cell) { cell.classList.add('ed-on'); cell.dataset.layer = n.user_idx != null ? n.user_idx : 0; }
+    }
+  });
+}
+
+function cbApplyNote(action, note, step, duration, velocity, user_idx) {
+  cbNotes = cbNotes.filter(n => !(n.note === note && n.step === step));
+  if (action === 'add') cbNotes.push({ note, step, duration: duration || 1, velocity: velocity || 90, user_idx: user_idx || 0 });
+  cbRefreshGrid();
+  document.getElementById('cb-note-count').textContent = cbNotes.length;
+}
+
+function cbUpdateUsers(users) {
+  const el = document.getElementById('cb-users');
+  if (!el) return;
+  el.innerHTML = users.map(u =>
+    `<span class="cb-user-pill${u.is_host ? ' is-host' : ''}" style="border-color:${u.color};color:${u.color}">${u.is_host ? '★ ' : ''}${u.name}</span>`
+  ).join('');
+}
+
+function cbShowRoom(code) {
+  document.getElementById('cb-lobby').style.display = 'none';
+  document.getElementById('cb-room').style.display  = 'flex';
+  document.getElementById('cb-room-code').textContent = code;
+}
+
+function cbCreate() {
+  if (!wsReady) { document.getElementById('cb-error').textContent = 'not connected'; return; }
+  const name = document.getElementById('cb-name-input').value.trim() || 'anon';
+  document.getElementById('cb-error').textContent = '';
+  ws.send(JSON.stringify({ type: 'collab_create', name }));
+}
+
+function cbJoin() {
+  if (!wsReady) { document.getElementById('cb-error').textContent = 'not connected'; return; }
+  const name = document.getElementById('cb-name-input').value.trim() || 'anon';
+  const code = document.getElementById('cb-code-input').value.trim();
+  if (!code) { document.getElementById('cb-error').textContent = 'enter a room code'; return; }
+  document.getElementById('cb-error').textContent = '';
+  ws.send(JSON.stringify({ type: 'collab_join', name, code }));
+}
+
+function cbLeave() {
+  if (!wsReady || !cbInRoom) return;
+  ws.send(JSON.stringify({ type: 'collab_leave' }));
+  cbInRoom = false;
+  cbRoomCode = null;
+  cbNotes = [];
+  cbCellMap.clear();
+  cbBuilt = 0;
+  cbStopPlayback();
+  document.getElementById('cb-lobby').style.display = '';
+  document.getElementById('cb-room').style.display  = 'none';
+  document.getElementById('cb-note-count').textContent = '0';
+  document.getElementById('cb-status').textContent = '';
+}
+
+function cbSendBpm() {
+  if (!wsReady || !cbInRoom) return;
+  const bpm = parseInt(document.getElementById('cb-bpm').value);
+  if (bpm >= 40 && bpm <= 280) ws.send(JSON.stringify({ type: 'collab_bpm', bpm }));
+}
+
+function cbPlay() {
+  if (!wsReady || !cbInRoom) return;
+  document.getElementById('cb-status').textContent = 'rendering…';
+  ws.send(JSON.stringify({ type: 'collab_play', action: 'play' }));
+}
+
+function cbStop() {
+  if (!wsReady || !cbInRoom) return;
+  ws.send(JSON.stringify({ type: 'collab_play', action: 'stop' }));
+}
+
+function cbStopPlayback() {
+  if (cbAudioSource) { try { cbAudioSource.stop(); } catch(e){} cbAudioSource = null; }
+  cbIsPlaying = false;
+  const ph = document.getElementById('cb-playhead');
+  if (ph) ph.style.display = 'none';
+  document.getElementById('cb-status').textContent = '';
+}
+
+async function cbReceiveAudio(audioB64, bpm, steps, stepBeats) {
+  cbStopPlayback();
+  const ctx = getCtx();
+  try {
+    const buf = await ctx.decodeAudioData(b64ToArrayBuffer(audioB64));
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.loop = true;
+    src.connect(gainNode || ctx.destination);
+    src.start();
+    cbAudioSource = src;
+    cbIsPlaying = true;
+    document.getElementById('cb-status').textContent = 'playing';
+    // animate playhead
+    const loopSecs  = steps * stepBeats * (60 / bpm);
+    const totalPx   = steps * 40;
+    const startTime = ctx.currentTime;
+    const ph        = document.getElementById('cb-playhead');
+    if (ph) {
+      ph.style.display = 'block';
+      function animCb() {
+        if (!cbIsPlaying || !cbAudioSource) { ph.style.display = 'none'; return; }
+        const elapsed = (ctx.currentTime - startTime) % loopSecs;
+        ph.style.left = (elapsed / loopSecs * totalPx) + 'px';
+        requestAnimationFrame(animCb);
+      }
+      requestAnimationFrame(animCb);
+    }
+  } catch(e) { console.error('cb audio:', e); document.getElementById('cb-status').textContent = 'audio error'; }
+}
+
+function cbClearAll() {
+  if (!wsReady || !cbInRoom) return;
+  ws.send(JSON.stringify({ type: 'collab_clear' }));
+}
+
+// handle collab WS messages (called from ws.onmessage)
+async function cbHandleMessage(msg) {
+  if (msg.type === 'collab_joined') {
+    cbInRoom     = true;
+    cbRoomCode   = msg.code;
+    cbIsHost     = msg.is_host;
+    cbMyColorIdx = msg.your_color_idx;
+    cbBpm        = msg.state.bpm;
+    cbSteps      = msg.state.steps;
+    cbStepBeats  = msg.state.step_beats;
+    cbNotes      = msg.state.notes || [];
+    document.getElementById('cb-bpm').value = cbBpm;
+    cbShowRoom(msg.code);
+    cbUpdateUsers(msg.users);
+    buildCbKeys();
+    buildCbGrid(cbSteps);
+    cbRefreshGrid();
+    document.getElementById('cb-note-count').textContent = cbNotes.length;
+    if (activeTab !== 'collab') switchTab('collab');
+    return;
+  }
+  if (msg.type === 'collab_error') {
+    document.getElementById('cb-error').textContent = msg.msg;
+    return;
+  }
+  if (!cbInRoom) return;
+  if (msg.type === 'collab_user_joined' || msg.type === 'collab_user_left') {
+    cbUpdateUsers(msg.users);
+    return;
+  }
+  if (msg.type === 'collab_note') {
+    cbApplyNote(msg.action, msg.note, msg.step, msg.duration, msg.velocity, msg.user_idx);
+    return;
+  }
+  if (msg.type === 'collab_bpm') {
+    cbBpm = msg.bpm;
+    document.getElementById('cb-bpm').value = cbBpm;
+    return;
+  }
+  if (msg.type === 'collab_play') {
+    if (msg.action === 'stop') cbStopPlayback();
+    return;
+  }
+  if (msg.type === 'collab_audio') {
+    await cbReceiveAudio(msg.audio, msg.bpm, msg.steps, msg.step_beats);
+    return;
+  }
+  if (msg.type === 'collab_clear') {
+    cbNotes = [];
+    cbRefreshGrid();
+    document.getElementById('cb-note-count').textContent = '0';
+    cbStopPlayback();
+    return;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // WEBSOCKET
 // ─────────────────────────────────────────────────────────────────────────────
 function connectWS() {
@@ -2221,6 +2607,9 @@ function connectWS() {
     const msg = JSON.parse(e.data);
 
     if (msg.type === 'pong') return;
+
+    // collab messages
+    if (msg.type.startsWith('collab_')) { await cbHandleMessage(msg); return; }
 
     if (msg.type === 'full_state') {
       applyState(msg, false);
