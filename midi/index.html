@@ -732,7 +732,7 @@
       <div class="ed-group">
         <span class="ed-label">bars</span>
         <button class="ed-btn" onclick="edAddBars(-1)" style="padding:2px 7px">−</button>
-        <span id="ed-bars-display" style="font-size:0.65rem;color:var(--text);min-width:20px;text-align:center;display:inline-block">2</span>
+        <span id="ed-bars-display" style="font-size:0.65rem;color:var(--text);min-width:20px;text-align:center;display:inline-block">4</span>
         <button class="ed-btn" onclick="edAddBars(1)" style="padding:2px 7px">+</button>
       </div>
       <div class="ed-group">
@@ -1479,7 +1479,7 @@ function edRefreshGrid() {
 }
 
 // ── bars / steps ──────────────────────────────────────────────────────────────
-let edBarCount = 2;
+let edBarCount = 4;
 
 function edGetStepBeats() {
   return parseFloat(document.getElementById('ed-stepsize').value) || 0.5;
@@ -1678,12 +1678,19 @@ function edAnimatePlayhead(steps, stepBeats, bpm) {
     const pxPos   = elapsed / totalSec * steps * 40;
     ph.style.left = pxPos + 'px';
 
-    // detect loop wrap — elapsed resets near 0 while lastElapsed was near end
-    const visW = rollWrap.clientWidth;
-    if (lastElapsed >= 0 && elapsed < lastElapsed - totalSec * 0.5) {
+    // autoscroll + snap
+    const visW      = rollWrap.clientWidth;
+    const gridW     = steps * 40;
+    const canScroll = visW > 0 && gridW > visW;
+    const loopWrap  = lastElapsed >= 0 && elapsed < lastElapsed - totalSec * 0.5;
+
+    if (loopWrap) {
       rollWrap.scrollLeft = 0;
-    } else if (visW > 0 && pxPos > rollWrap.scrollLeft + visW - 80) {
-      // playhead approaching right edge — scroll to keep it in view
+      // flash playhead on loop restart so snap-back is always visible
+      ph.style.opacity = '0.3';
+      setTimeout(() => { ph.style.opacity = '1'; }, 80);
+    } else if (canScroll && pxPos > rollWrap.scrollLeft + visW - 80) {
+      // playhead near right edge: scroll forward to keep it in view
       rollWrap.scrollLeft = pxPos - 60;
     }
 
@@ -2094,7 +2101,7 @@ buildKeys();
 buildGrid(16);
 buildEdKeys();
 buildTrackUI();
-buildEdGrid(16);
+buildEdGrid(edGetSteps());
 edUpdateFooter();
 connectWS();
 </script>
