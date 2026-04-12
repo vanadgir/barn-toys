@@ -731,9 +731,9 @@
       </div>
       <div class="ed-group">
         <span class="ed-label">bars</span>
-        <button class="ed-btn" onclick="edAddBars(-4)" style="padding:2px 7px">−4</button>
+        <button class="ed-btn" onclick="edAddBars(-1)" style="padding:2px 7px">−</button>
         <span id="ed-bars-display" style="font-size:0.65rem;color:var(--text);min-width:20px;text-align:center;display:inline-block">2</span>
-        <button class="ed-btn" onclick="edAddBars(4)" style="padding:2px 7px">+4</button>
+        <button class="ed-btn" onclick="edAddBars(1)" style="padding:2px 7px">+</button>
       </div>
       <div class="ed-group">
         <span class="ed-label">step</span>
@@ -1679,9 +1679,10 @@ function edAnimatePlayhead(steps, stepBeats, bpm) {
     ph.style.left = pxPos + 'px';
 
     // detect loop wrap — elapsed resets near 0 while lastElapsed was near end
+    const visW = rollWrap.clientWidth;
     if (lastElapsed >= 0 && elapsed < lastElapsed - totalSec * 0.5) {
       rollWrap.scrollLeft = 0;
-    } else if (pxPos > rollWrap.scrollLeft + rollWrap.clientWidth - 80) {
+    } else if (visW > 0 && pxPos > rollWrap.scrollLeft + visW - 80) {
       // playhead approaching right edge — scroll to keep it in view
       rollWrap.scrollLeft = pxPos - 60;
     }
