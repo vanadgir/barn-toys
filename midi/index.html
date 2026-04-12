@@ -1666,14 +1666,27 @@ async function edReceiveAudio(msg) {
 
 function edAnimatePlayhead(steps, stepBeats, bpm) {
   const ph       = document.getElementById('ed-playhead');
+  const rollWrap = document.getElementById('ed-roll-wrap');
   const totalSec = steps * stepBeats * (60 / bpm);
   ph.style.display = 'block';
+  let lastElapsed = -1;
 
   function frame() {
     if (!edIsPlaying) return;
     const ctx     = getEdCtx();
     const elapsed = (ctx.currentTime - edPlayStart) % totalSec;
-    ph.style.left = (elapsed / totalSec * steps * 40) + 'px';
+    const pxPos   = elapsed / totalSec * steps * 40;
+    ph.style.left = pxPos + 'px';
+
+    // detect loop wrap — elapsed resets near 0 while lastElapsed was near end
+    if (lastElapsed >= 0 && elapsed < lastElapsed - totalSec * 0.5) {
+      rollWrap.scrollLeft = 0;
+    } else if (pxPos > rollWrap.scrollLeft + rollWrap.clientWidth - 80) {
+      // playhead approaching right edge — scroll to keep it in view
+      rollWrap.scrollLeft = pxPos - 60;
+    }
+
+    lastElapsed = elapsed;
     edAnimId = requestAnimationFrame(frame);
   }
   frame();
