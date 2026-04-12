@@ -636,6 +636,22 @@
     .ed-cell.ed-on[data-layer="2"] { background: rgba(92,168,122,0.82) !important; }
     .ed-cell.ed-on[data-layer="3"] { background: rgba(200,96,75,0.82)  !important; }
 
+    #ed-sel-box {
+      position: absolute;
+      border: 1.5px dashed rgba(75,139,200,0.75);
+      background: rgba(75,139,200,0.07);
+      pointer-events: none;
+      display: none;
+      z-index: 10;
+    }
+    .ed-cell.ed-selected::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border: 2px solid rgba(255,255,255,0.55);
+      pointer-events: none;
+    }
+
     /* editor playhead */
     .ed-playhead {
       position: absolute;
@@ -777,6 +793,7 @@
       <div class="ed-keys" id="ed-keys"></div>
       <div class="ed-roll-wrap" id="ed-roll-wrap">
         <div class="ed-roll-inner" id="ed-roll-inner">
+          <div id="ed-sel-box"></div>
           <div class="ed-playhead" id="ed-playhead"></div>
         </div>
       </div>
@@ -908,6 +925,14 @@ let edAnimId      = null;
 let edIsPlaying   = false;
 let edPendingRender = false; // waiting for server response
 let edLiveUpdateTimer = null; // debounce timer for live note update
+
+let edSelected    = new Set();   // indices into edNotes that are selected
+let edSelecting   = false;       // drag-select in progress
+let edSelBox      = { r1:0, s1:0, r2:0, s2:0 }; // drag-select box (row/step coords)
+let edUndoStack   = [];          // snapshots of edNotes for undo
+const ED_UNDO_MAX = 20;
+let edCursorStep  = 0;           // step to restart playback from (spacebar)
+let edCursorOfs   = 0;           // pending resume offset in seconds for next play
 
 function getCtx() {
   if (!audioCtx) {
@@ -1401,10 +1426,24 @@ function buildEdGrid(steps) {
 
       cell.addEventListener('mousedown', e => {
         e.preventDefault();
-        edCellClick(midi, s, row, cell);
+        if (e.shiftKey) {
+          // start drag-select
+          edSelecting = true;
+          edSelBox = { r1: row, s1: s, r2: row, s2: s };
+          edUpdateSelBox();
+        } else {
+          if (!e.ctrlKey && !e.metaKey) edClearSelection();
+          edCellClick(midi, s, row, cell);
+        }
       });
       cell.addEventListener('mouseenter', e => {
-        if (e.buttons === 1) edCellClick(midi, s, row, cell);
+        if (e.buttons !== 1) return;
+        if (edSelecting) {
+          edSelBox.r2 = row; edSelBox.s2 = s;
+          edUpdateSelBox();
+        } else {
+          edCellClick(midi, s, row, cell);
+        }
       });
 
       edCellMap.set(`${row}-${s}`, cell);
@@ -1420,6 +1459,7 @@ function buildEdGrid(steps) {
 
 // ── click handler ─────────────────────────────────────────────────────────────
 function edCellClick(midi, step, row, cell) {
+  edPushUndo();
   const steps   = edGetSteps();
   const notelen = parseInt(document.getElementById('ed-notelen').value);
   const vel     = parseInt(document.getElementById('ed-vel').value);
@@ -1476,6 +1516,106 @@ function edRefreshGrid() {
       }
     }
   });
+
+  // apply selection highlight
+  edCellMap.forEach(cell => cell.classList.remove('ed-selected'));
+  edSelected.forEach(idx => {
+    const n = edNotes[idx];
+    if (!n) return;
+    const row = edRowMap.get(n.note);
+    if (row == null) return;
+    for (let d = 0; d < (n.duration || 1); d++) {
+      const cell = edCellMap.get(`${row}-${n.step + d}`);
+      if (cell) cell.classList.add('ed-selected');
+    }
+  });
+}
+
+// ── selection helpers ─────────────────────────────────────────────────────────
+function edPushUndo() {
+  edUndoStack.push(edNotes.map(n => ({...n})));
+  if (edUndoStack.length > ED_UNDO_MAX) edUndoStack.shift();
+}
+
+function edUndo() {
+  if (!edUndoStack.length) return;
+  edNotes = edUndoStack.pop();
+  edSelected.clear();
+  edRefreshGrid();
+  edUpdateFooter();
+  edScheduleLiveUpdate();
+}
+
+function edClearSelection() {
+  edSelected.clear();
+  edRefreshGrid();
+}
+
+function edSelectAll() {
+  edSelected = new Set(edNotes.map((_, i) => i));
+  edRefreshGrid();
+}
+
+function edDeleteSelected() {
+  if (!edSelected.size) return;
+  edPushUndo();
+  edNotes = edNotes.filter((_, i) => !edSelected.has(i));
+  edSelected.clear();
+  edRefreshGrid();
+  edUpdateFooter();
+  edScheduleLiveUpdate();
+}
+
+function edDuplicateSelected() {
+  if (!edSelected.size) return;
+  const sel = [...edSelected].map(i => edNotes[i]);
+  if (!sel.length) return;
+  const minStep = Math.min(...sel.map(n => n.step));
+  const maxEnd  = Math.max(...sel.map(n => n.step + (n.duration || 1)));
+  const span    = maxEnd - minStep;
+  const totalSteps = edGetSteps();
+  edPushUndo();
+  const newNotes = sel
+    .map(n => ({ ...n, step: n.step + span }))
+    .filter(n => n.step < totalSteps);
+  const offset = edNotes.length;
+  edNotes = [...edNotes, ...newNotes];
+  edSelected = new Set(newNotes.map((_, i) => offset + i));
+  edRefreshGrid();
+  edUpdateFooter();
+  edScheduleLiveUpdate();
+}
+
+// drag-select box
+function edUpdateSelBox() {
+  const el = document.getElementById('ed-sel-box');
+  if (!el) return;
+  const r1 = Math.min(edSelBox.r1, edSelBox.r2);
+  const r2 = Math.max(edSelBox.r1, edSelBox.r2);
+  const s1 = Math.min(edSelBox.s1, edSelBox.s2);
+  const s2 = Math.max(edSelBox.s1, edSelBox.s2);
+  el.style.display = 'block';
+  el.style.left    = (s1 * 40) + 'px';
+  el.style.top     = (r1 * 14) + 'px';
+  el.style.width   = ((s2 - s1 + 1) * 40) + 'px';
+  el.style.height  = ((r2 - r1 + 1) * 14) + 'px';
+}
+
+function edFinalizeSelBox() {
+  const r1 = Math.min(edSelBox.r1, edSelBox.r2);
+  const r2 = Math.max(edSelBox.r1, edSelBox.r2);
+  const s1 = Math.min(edSelBox.s1, edSelBox.s2);
+  const s2 = Math.max(edSelBox.s1, edSelBox.s2);
+  edSelected.clear();
+  edNotes.forEach((n, i) => {
+    const row = edRowMap.get(n.note);
+    if (row == null || row < r1 || row > r2) return;
+    // note overlaps the step range
+    const nEnd = n.step + (n.duration || 1) - 1;
+    if (nEnd >= s1 && n.step <= s2) edSelected.add(i);
+  });
+  document.getElementById('ed-sel-box').style.display = 'none';
+  edRefreshGrid();
 }
 
 // ── bars / steps ──────────────────────────────────────────────────────────────
@@ -1512,6 +1652,54 @@ document.getElementById('ed-stepsize').addEventListener('change', () => {
   edBuilt = 0;
   buildEdGrid(edGetSteps());
   edUpdateFooter();
+});
+
+document.addEventListener('mouseup', () => {
+  if (edSelecting) {
+    edFinalizeSelBox();
+    edSelecting = false;
+  }
+});
+
+document.addEventListener('keydown', e => {
+  if (!document.getElementById('panel-editor').classList.contains('active')) return;
+  const tag = document.activeElement?.tagName;
+  const inInput = tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA';
+
+  if (e.code === 'Space' && !inInput) {
+    e.preventDefault();
+    if (edIsPlaying) {
+      // stop and save cursor at nearest bar-1 downbeat
+      const spb   = edGetStepsPerBar();
+      const total = edGetSteps();
+      const elapsed = (getEdCtx().currentTime - edPlayStart) % edPlayDur;
+      const stepF  = (elapsed / edPlayDur) * total;
+      edCursorStep = Math.floor(stepF / spb) * spb;
+      edStop();
+    } else {
+      const stepB = edGetStepBeats();
+      const bpm   = parseFloat(document.getElementById('ed-bpm').value) || 120;
+      edCursorOfs = edCursorStep * stepB * (60 / bpm);
+      edPlay();
+    }
+    return;
+  }
+
+  if (e.key === 'Escape') { edClearSelection(); return; }
+
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    if (!inInput && edSelected.size > 0) {
+      e.preventDefault();
+      edDeleteSelected();
+    }
+    return;
+  }
+
+  if (e.ctrlKey || e.metaKey) {
+    if (e.key === 'a') { e.preventDefault(); edSelectAll(); }
+    if (e.key === 'd') { e.preventDefault(); edDuplicateSelected(); }
+    if (e.key === 'z') { e.preventDefault(); edUndo(); }
+  }
 });
 
 // ── velocity display ──────────────────────────────────────────────────────────
@@ -1637,6 +1825,9 @@ async function edReceiveAudio(msg) {
     const ctx0 = getEdCtx();
     resumeOffset = (ctx0.currentTime - edPlayStart) % edPlayDur;
     resumeOffset = Math.min(resumeOffset, exactDur - 0.01);
+  } else if (edCursorOfs > 0) {
+    resumeOffset = Math.min(edCursorOfs, exactDur - 0.01);
+    edCursorOfs = 0;
   }
 
   edStop();
