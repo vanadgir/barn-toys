@@ -1105,6 +1105,82 @@ function resolveInstrumentName(sf, program, bank = 0) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// SHARED GRID CORE
+// Foundation for both the solo editor and collab grids.
+// Grid construction and refresh live here. Interaction (drag-select vs WS
+// broadcast) is injected by each tab via callbacks so there's no duplication.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Build piano key strips into `el`.
+ * @param {HTMLElement}   el       - container element
+ * @param {Function|null} onClick  - (midi) => void, or null for display-only
+ */
+function buildPianoKeys(el, onClick) {
+  el.innerHTML = '';
+  NOTES.forEach(midi => {
+    const key = document.createElement('div');
+    key.className = `key ${isBlack(midi) ? 'black' : 'white'}${midi % 12 === 0 ? ' c' : ''}`;
+    key.textContent = midi % 12 === 0 ? noteName(midi) : '';
+    key.title = noteName(midi);
+    key.dataset.midi = midi;
+    if (onClick) key.addEventListener('click', () => onClick(midi));
+    el.appendChild(key);
+  });
+}
+
+/**
+ * Build note grid rows + cells into `innerEl`, populate `cellMap`.
+ * @param {HTMLElement} innerEl    - the .ed-roll-inner div
+ * @param {number}      steps      - total step count
+ * @param {number}      spb        - steps per bar (for bar-start/beat-start CSS)
+ * @param {Map}         cellMap    - cleared + repopulated: 'row-step' → cell
+ * @param {HTMLElement} playheadEl - grid rows are inserted before this element
+ * @param {Function}    onCell     - (cell, midi, step, row) => void — attach listeners here
+ */
+function buildNoteGrid(innerEl, steps, spb, cellMap, playheadEl, onCell) {
+  cellMap.clear();
+  innerEl.querySelectorAll('.ed-row').forEach(r => r.remove());
+  const frag = document.createDocumentFragment();
+  NOTES.forEach((midi, row) => {
+    const rowEl = document.createElement('div');
+    rowEl.className = `ed-row${isBlack(midi) ? ' is-black' : ''}`;
+    for (let s = 0; s < steps; s++) {
+      const cell = document.createElement('div');
+      const cls  = s % spb === 0 ? 'bar-start' : (s % Math.max(1, Math.round(spb / 2)) === 0 ? 'beat-start' : '');
+      cell.className = 'ed-cell' + (cls ? ' ' + cls : '');
+      cell.dataset.row  = row;
+      cell.dataset.step = s;
+      cell.dataset.midi = midi;
+      if (onCell) onCell(cell, midi, s, row);
+      cellMap.set(`${row}-${s}`, cell);
+      rowEl.appendChild(cell);
+    }
+    frag.appendChild(rowEl);
+  });
+  innerEl.insertBefore(frag, playheadEl);
+}
+
+/**
+ * Refresh the visual state of a note grid — clear ed-on, repaint from notes.
+ * @param {Array}    notes    - note objects
+ * @param {Map}      cellMap  - 'row-step' → cell
+ * @param {Function} layerFn  - (note) => number — CSS data-layer value for coloring
+ */
+function refreshNoteGrid(notes, cellMap, layerFn) {
+  cellMap.forEach(cell => { cell.classList.remove('ed-on'); delete cell.dataset.layer; });
+  notes.forEach(n => {
+    const row = edRowMap.get(n.note);
+    if (row == null) return;
+    const layer = layerFn ? layerFn(n) : 0;
+    for (let d = 0; d < (n.duration || 1); d++) {
+      const cell = cellMap.get(`${row}-${n.step + d}`);
+      if (cell) { cell.classList.add('ed-on'); cell.dataset.layer = layer; }
+    }
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // SHARED AUDIO + WS STATE
 // ─────────────────────────────────────────────────────────────────────────────
 let audioCtx    = null;
@@ -1594,55 +1670,28 @@ function toggleSolo(idx, e) {
 
 // ── build editor piano keys ───────────────────────────────────────────────────
 function buildEdKeys() {
-  const el = document.getElementById('ed-keys');
-  el.innerHTML = '';
-  NOTES.forEach(midi => {
-    const black = isBlack(midi);
-    const isC   = (midi % 12) === 0;
-    const key   = document.createElement('div');
-    key.className = `key ${black ? 'black' : 'white'}${isC ? ' c' : ''}`;
-    key.textContent = isC ? noteName(midi) : '';
-    key.title = noteName(midi);
-    key.dataset.midi = midi;
-    key.addEventListener('click', () => edPreviewNote(midi));
-    el.appendChild(key);
-  });
+  buildPianoKeys(document.getElementById('ed-keys'), edPreviewNote);
 }
 
 // ── build editor grid ─────────────────────────────────────────────────────────
 function buildEdGrid(steps) {
   if (steps === edBuilt && edCellMap.size > 0) return;
   edBuilt = steps;
-  edCellMap.clear();
-
-  const inner = document.getElementById('ed-roll-inner');
-  inner.querySelectorAll('.ed-row').forEach(r => r.remove());
-
-  const spb = edGetStepsPerBar(); // steps per bar based on current step size
-
-  const frag = document.createDocumentFragment();
-  NOTES.forEach((midi, row) => {
-    const rowEl = document.createElement('div');
-    rowEl.className = `ed-row${isBlack(midi) ? ' is-black' : ''}`;
-
-    for (let s = 0; s < steps; s++) {
-      const cell = document.createElement('div');
-      const cls  = s % spb === 0 ? 'bar-start' : (s % Math.max(1, Math.round(spb / 2)) === 0 ? 'beat-start' : '');
-      cell.className = 'ed-cell' + (cls ? ' ' + cls : '');
-      cell.dataset.row  = row;
-      cell.dataset.step = s;
-      cell.dataset.midi = midi;
-
+  buildNoteGrid(
+    document.getElementById('ed-roll-inner'),
+    steps,
+    edGetStepsPerBar(),
+    edCellMap,
+    document.getElementById('ed-playhead'),
+    (cell, midi, s, row) => {
       cell.addEventListener('mousedown', e => {
         e.preventDefault();
         edMouseDownCell = { row, step: s, midi, ctrl: e.ctrlKey || e.metaKey };
         edDragged = false;
-        // action (toggle note or finalize selection) fires on mouseup, not here
       });
       cell.addEventListener('mouseenter', e => {
         if (e.buttons !== 1 || !edMouseDownCell) return;
         if (!edDragged) {
-          // first move to a different cell — kick off box-select
           edDragged = true;
           edSelecting = true;
           if (!edMouseDownCell.ctrl) edClearSelection();
@@ -1652,15 +1701,8 @@ function buildEdGrid(steps) {
         }
         edUpdateSelBox();
       });
-
-      edCellMap.set(`${row}-${s}`, cell);
-      rowEl.appendChild(cell);
     }
-    frag.appendChild(rowEl);
-  });
-
-  const ph = document.getElementById('ed-playhead');
-  inner.insertBefore(frag, ph);
+  );
   edRefreshGrid();
 }
 
@@ -1704,27 +1746,8 @@ function edScheduleLiveUpdate() {
 
 // ── refresh grid display ──────────────────────────────────────────────────────
 function edRefreshGrid() {
-  // clear all cells
-  edCellMap.forEach(cell => {
-    cell.classList.remove('ed-on');
-    cell.removeAttribute('data-layer');
-  });
-
-  edNotes.forEach(n => {
-    const row = edRowMap.get(n.note);
-    if (row == null) return;
-    const dur = n.duration || 1;
-    for (let d = 0; d < dur; d++) {
-      const key  = `${row}-${n.step + d}`;
-      const cell = edCellMap.get(key);
-      if (cell) {
-        cell.classList.add('ed-on');
-        cell.dataset.layer = n.track;
-      }
-    }
-  });
-
-  // apply selection highlight
+  refreshNoteGrid(edNotes, edCellMap, n => n.track ?? 0);
+  // selection highlight is editor-only — apply after base refresh
   edCellMap.forEach(cell => cell.classList.remove('ed-selected'));
   edSelected.forEach(idx => {
     const n = edNotes[idx];
@@ -2450,38 +2473,20 @@ function cbGetSpb() {
 function buildCbKeys() {
   const el = document.getElementById('cb-keys');
   if (!el || el.children.length) return;
-  NOTES.forEach(midi => {
-    const key = document.createElement('div');
-    key.className = 'key' + (isBlack(midi) ? ' black' : ' white') + (midi % 12 === 0 ? ' c' : '');
-    if (midi % 12 === 0) key.textContent = noteName(midi);
-    el.appendChild(key);
-  });
+  buildPianoKeys(el, null); // display-only in collab (no local preview)
 }
 
 function buildCbGrid(steps) {
   if (steps === cbBuilt && cbCellMap.size > 0) return;
   cbBuilt = steps;
-  cbCellMap.clear();
-  const inner = document.getElementById('cb-roll-inner');
-  inner.querySelectorAll('.ed-row').forEach(r => r.remove());
-  const spb  = cbGetSpb();
-  const frag = document.createDocumentFragment();
-  NOTES.forEach((midi, row) => {
-    const rowEl = document.createElement('div');
-    rowEl.className = `ed-row${isBlack(midi) ? ' is-black' : ''}`;
-    for (let s = 0; s < steps; s++) {
-      const cell = document.createElement('div');
-      const cls  = s % spb === 0 ? 'bar-start' : (s % Math.max(1, Math.round(spb / 2)) === 0 ? 'beat-start' : '');
-      cell.className = 'ed-cell' + (cls ? ' ' + cls : '');
-      cell.dataset.midi = midi;
-      cell.addEventListener('click', () => cbCellClick(midi, s));
-      cbCellMap.set(`${row}-${s}`, cell);
-      rowEl.appendChild(cell);
-    }
-    frag.appendChild(rowEl);
-  });
-  const ph = document.getElementById('cb-playhead');
-  inner.insertBefore(frag, ph);
+  buildNoteGrid(
+    document.getElementById('cb-roll-inner'),
+    steps,
+    cbGetSpb(),
+    cbCellMap,
+    document.getElementById('cb-playhead'),
+    (cell, midi, s) => cell.addEventListener('click', () => cbCellClick(midi, s))
+  );
   cbRefreshGrid();
 }
 
@@ -2496,15 +2501,7 @@ function cbCellClick(midi, step) {
 }
 
 function cbRefreshGrid() {
-  cbCellMap.forEach(cell => { cell.classList.remove('ed-on'); delete cell.dataset.layer; });
-  cbNotes.forEach(n => {
-    const row = edRowMap.get(n.note);
-    if (row == null) return;
-    for (let d = 0; d < (n.duration || 1); d++) {
-      const cell = cbCellMap.get(`${row}-${n.step + d}`);
-      if (cell) { cell.classList.add('ed-on'); cell.dataset.layer = n.user_idx != null ? n.user_idx : 0; }
-    }
-  });
+  refreshNoteGrid(cbNotes, cbCellMap, n => n.user_idx ?? 0);
 }
 
 function cbApplyNote(action, note, step, duration, velocity, user_idx) {
