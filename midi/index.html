@@ -533,6 +533,41 @@
     .ed-track-mute:hover, .ed-track-solo:hover { border-color: var(--muted); color: var(--text); }
     .ed-track-mute.active { color: #c84b4b; border-color: rgba(200,75,75,0.5); background: rgba(200,75,75,0.08); }
     .ed-track-solo.active { color: var(--accent); border-color: rgba(200,168,75,0.5); background: rgba(200,168,75,0.08); }
+    .ed-track-del {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.5rem;
+      color: var(--muted);
+      background: none;
+      border: 1px solid transparent;
+      border-radius: 2px;
+      padding: 1px 5px;
+      cursor: pointer;
+      transition: all 0.12s;
+      margin-left: 2px;
+    }
+    .ed-track-del:hover { color: #c84b4b; border-color: rgba(200,75,75,0.4); }
+    .ed-tracks-add-row {
+      display: flex;
+      align-items: center;
+      padding: 3px 8px;
+      gap: 6px;
+      cursor: pointer;
+      transition: background 0.12s;
+      border-radius: 3px;
+    }
+    .ed-tracks-add-row:hover { background: rgba(255,255,255,0.03); }
+    .ed-tracks-add-btn {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.6rem;
+      color: var(--muted);
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 2px;
+      padding: 1px 7px;
+      cursor: pointer;
+      transition: all 0.12s;
+    }
+    .ed-tracks-add-btn:hover { color: var(--text); border-color: var(--muted); }
 
     /* ── editor main area (keys + roll) ── */
     .ed-main {
@@ -695,12 +730,10 @@
         <input type="number" id="ed-bpm" class="ed-input" min="60" max="220" value="120">
       </div>
       <div class="ed-group">
-        <span class="ed-label">steps</span>
-        <select id="ed-steps" class="ed-select">
-          <option value="8">8</option>
-          <option value="16" selected>16</option>
-          <option value="32">32</option>
-        </select>
+        <span class="ed-label">bars</span>
+        <button class="ed-btn" onclick="edAddBars(-4)" style="padding:2px 7px">−4</button>
+        <span id="ed-bars-display" style="font-size:0.65rem;color:var(--text);min-width:20px;text-align:center;display:inline-block">2</span>
+        <button class="ed-btn" onclick="edAddBars(4)" style="padding:2px 7px">+4</button>
       </div>
       <div class="ed-group">
         <span class="ed-label">step</span>
@@ -792,6 +825,10 @@ const INST_DATA = {
       1: [
         [80,'GB Square 2'],[81,'GB Square 3'],[82,'GB Calliope 2'],
       ],
+      128: [
+        [0,'Standard Kit'],[8,'Room Kit'],[16,'Power Kit'],
+        [24,'Electronic Kit'],[25,'TR-808'],[32,'Jazz Kit'],[40,'Brush Kit'],
+      ],
     }
   },
   megadrive: {
@@ -807,6 +844,9 @@ const INST_DATA = {
         [69,'Oboe'],[72,'Flute'],[78,'Whistle'],[80,'Square Wave'],
         [81,'Sawtooth'],[82,'Lead 1'],[83,'Lead 2'],[89,'Warm Pad'],
         [90,'Sweep Pad'],[91,'Choir Pad'],
+      ],
+      128: [
+        [0,'MD Drums'],[25,'MD TR-808'],[32,'MD Jazz Kit'],
       ],
     }
   },
@@ -867,6 +907,7 @@ let edPlayDur     = 0;
 let edAnimId      = null;
 let edIsPlaying   = false;
 let edPendingRender = false; // waiting for server response
+let edLiveUpdateTimer = null; // debounce timer for live note update
 
 function getCtx() {
   if (!audioCtx) {
@@ -1164,9 +1205,9 @@ function previewNote(midi) {
 
 // editor state
 const ED_TRACKS = [
-  { name: 'track 1', sf: 'pokemon', bank: 0, program: 80, mute: false, solo: false },
-  { name: 'track 2', sf: 'pokemon', bank: 0, program: 33, mute: false, solo: false },
-  { name: 'track 3', sf: 'pokemon', bank: 0, program: 48, mute: false, solo: false },
+  { name: 'lead',  sf: 'pokemon', bank: 0,   program: 80, mute: false, solo: false },
+  { name: 'bass',  sf: 'pokemon', bank: 0,   program: 33, mute: false, solo: false },
+  { name: 'drums', sf: 'pokemon', bank: 128, program: 0,  mute: false, solo: false },
 ];
 let edActiveTrack = 0;
 
@@ -1221,6 +1262,7 @@ function buildTrackUI() {
       </select>
       <button class="ed-track-mute${track.mute?' active':''}" onclick="toggleMute(${idx},event)">M</button>
       <button class="ed-track-solo${track.solo?' active':''}" onclick="toggleSolo(${idx},event)">S</button>
+      <button class="ed-track-del" onclick="removeTrack(${idx},event)" title="remove track">×</button>
     `;
 
     el.addEventListener('click', e => {
@@ -1238,6 +1280,32 @@ function buildTrackUI() {
 
     container.appendChild(el);
   });
+
+  // add-track row
+  const addRow = document.createElement('div');
+  addRow.className = 'ed-tracks-add-row';
+  addRow.innerHTML = `<button class="ed-tracks-add-btn" onclick="addTrack()">+ add track</button>`;
+  container.appendChild(addRow);
+}
+
+function addTrack() {
+  ED_TRACKS.push({ name: `track ${ED_TRACKS.length + 1}`, sf: 'pokemon', bank: 0, program: 80, mute: false, solo: false });
+  buildTrackUI();
+  setActiveTrack(ED_TRACKS.length - 1);
+}
+
+function removeTrack(idx, e) {
+  e.stopPropagation();
+  if (ED_TRACKS.length <= 1) return;
+  ED_TRACKS.splice(idx, 1);
+  edNotes = edNotes
+    .filter(n => n.track !== idx)
+    .map(n => ({ ...n, track: n.track > idx ? n.track - 1 : n.track }));
+  if (edActiveTrack >= ED_TRACKS.length) edActiveTrack = ED_TRACKS.length - 1;
+  buildTrackUI();
+  setActiveTrack(edActiveTrack);
+  edRefreshGrid();
+  edUpdateFooter();
 }
 
 function setActiveTrack(idx) {
@@ -1316,6 +1384,8 @@ function buildEdGrid(steps) {
   const inner = document.getElementById('ed-roll-inner');
   inner.querySelectorAll('.ed-row').forEach(r => r.remove());
 
+  const spb = edGetStepsPerBar(); // steps per bar based on current step size
+
   const frag = document.createDocumentFragment();
   NOTES.forEach((midi, row) => {
     const rowEl = document.createElement('div');
@@ -1323,7 +1393,7 @@ function buildEdGrid(steps) {
 
     for (let s = 0; s < steps; s++) {
       const cell = document.createElement('div');
-      const cls  = s % 4 === 0 ? 'bar-start' : (s % 2 === 0 ? 'beat-start' : '');
+      const cls  = s % spb === 0 ? 'bar-start' : (s % Math.max(1, Math.round(spb / 2)) === 0 ? 'beat-start' : '');
       cell.className = 'ed-cell' + (cls ? ' ' + cls : '');
       cell.dataset.row  = row;
       cell.dataset.step = s;
@@ -1350,19 +1420,18 @@ function buildEdGrid(steps) {
 
 // ── click handler ─────────────────────────────────────────────────────────────
 function edCellClick(midi, step, row, cell) {
-  const steps   = parseInt(document.getElementById('ed-steps').value);
+  const steps   = edGetSteps();
   const notelen = parseInt(document.getElementById('ed-notelen').value);
   const vel     = parseInt(document.getElementById('ed-vel').value);
   const tid     = edActiveTrack;
 
-  // check if note already exists at this cell for any step span that covers it
-  const existing = edNotes.find(n => n.track === tid && n.note === midi &&
+  // check if ANY note (any track) exists at this cell — clicking filled cell always removes
+  const existing = edNotes.find(n => n.note === midi &&
     step >= n.step && step < n.step + n.duration);
 
   if (existing) {
-    // remove it
+    // remove it (regardless of which track it's on)
     edNotes = edNotes.filter(n => n !== existing);
-    edPreviewNote(midi);
   } else {
     // clamp duration so it doesn't overflow
     const dur = Math.min(notelen, steps - step);
@@ -1372,6 +1441,18 @@ function edCellClick(midi, step, row, cell) {
 
   edRefreshGrid();
   edUpdateFooter();
+  edScheduleLiveUpdate();
+}
+
+// ── live playback update ──────────────────────────────────────────────────────
+function edScheduleLiveUpdate() {
+  if (!edIsPlaying) return;
+  if (edLiveUpdateTimer) clearTimeout(edLiveUpdateTimer);
+  edLiveUpdateTimer = setTimeout(() => {
+    edLiveUpdateTimer = null;
+    if (!edIsPlaying || edPendingRender) return;
+    edPlay();
+  }, 350);
 }
 
 // ── refresh grid display ──────────────────────────────────────────────────────
@@ -1397,11 +1478,39 @@ function edRefreshGrid() {
   });
 }
 
-// ── rebuild when steps changes ────────────────────────────────────────────────
-document.getElementById('ed-steps').addEventListener('change', e => {
-  const steps = parseInt(e.target.value);
-  edBuilt = 0; // force rebuild
-  buildEdGrid(steps);
+// ── bars / steps ──────────────────────────────────────────────────────────────
+let edBarCount = 2;
+
+function edGetStepBeats() {
+  return parseFloat(document.getElementById('ed-stepsize').value) || 0.5;
+}
+
+function edGetStepsPerBar(stepB) {
+  return Math.round(4 / (stepB || edGetStepBeats()));
+}
+
+function edGetSteps() {
+  return edBarCount * edGetStepsPerBar();
+}
+
+function edAddBars(delta) {
+  edBarCount = Math.max(1, edBarCount + delta);
+  document.getElementById('ed-bars-display').textContent = edBarCount;
+  const newSteps = edGetSteps();
+  // clip notes that now fall outside the grid
+  if (delta < 0) {
+    edNotes = edNotes.filter(n => n.step < newSteps);
+  }
+  edBuilt = 0;
+  buildEdGrid(newSteps);
+  edRefreshGrid();
+  edUpdateFooter();
+}
+
+// rebuild when step size changes (bar count stays, step count changes)
+document.getElementById('ed-stepsize').addEventListener('change', () => {
+  edBuilt = 0;
+  buildEdGrid(edGetSteps());
   edUpdateFooter();
 });
 
@@ -1413,8 +1522,8 @@ document.getElementById('ed-vel').addEventListener('input', e => {
 // ── footer update ─────────────────────────────────────────────────────────────
 function edUpdateFooter() {
   const bpm      = parseFloat(document.getElementById('ed-bpm').value) || 120;
-  const steps    = parseInt(document.getElementById('ed-steps').value);
-  const stepB    = parseFloat(document.getElementById('ed-stepsize').value);
+  const steps    = edGetSteps();
+  const stepB    = edGetStepBeats();
   const beats    = steps * stepB;
   const secs     = (beats * 60 / bpm).toFixed(1);
   document.getElementById('ed-note-count').textContent = edNotes.length;
@@ -1442,8 +1551,8 @@ function edPlay() {
   if (edPendingRender) return;
 
   const bpm      = parseFloat(document.getElementById('ed-bpm').value) || 120;
-  const steps    = parseInt(document.getElementById('ed-steps').value);
-  const stepB    = parseFloat(document.getElementById('ed-stepsize').value);
+  const steps    = edGetSteps();
+  const stepB    = edGetStepBeats();
 
   // determine which tracks are active (solo logic)
   const anySolo = ED_TRACKS.some(t => t.solo);
@@ -1487,6 +1596,7 @@ function edPlay() {
 
 // ── stop ──────────────────────────────────────────────────────────────────────
 function edStop() {
+  if (edLiveUpdateTimer) { clearTimeout(edLiveUpdateTimer); edLiveUpdateTimer = null; }
   if (edPlaySource) { try { edPlaySource.stop(); } catch(e) {} edPlaySource = null; }
   edIsPlaying = false;
   if (edAnimId) { cancelAnimationFrame(edAnimId); edAnimId = null; }
@@ -1519,13 +1629,22 @@ async function edReceiveAudio(msg) {
   document.getElementById('ed-play-btn').disabled = false;
 
   const { bpm, steps, step_beats, data } = msg;
+  const exactDur = steps * step_beats * (60 / bpm);
+
+  // if we were playing, save position so we can resume from the same spot
+  let resumeOffset = 0;
+  if (edIsPlaying && edPlayDur > 0) {
+    const ctx0 = getEdCtx();
+    resumeOffset = (ctx0.currentTime - edPlayStart) % edPlayDur;
+    resumeOffset = Math.min(resumeOffset, exactDur - 0.01);
+  }
+
   edStop();
   const ctx = getEdCtx();
   let audioBuf;
   try { audioBuf = await ctx.decodeAudioData(b64ToArrayBuffer(data)); }
   catch(e) { console.error('editor decode error', e); edSetStatus('decode error'); return; }
 
-  const exactDur = steps * step_beats * (60 / bpm);
   edPlayDur = exactDur;
 
   const src = ctx.createBufferSource();
@@ -1534,10 +1653,10 @@ async function edReceiveAudio(msg) {
   src.loopStart = 0;
   src.loopEnd   = exactDur;
   src.connect(edGainNode || ctx.destination);
-  src.start();
+  src.start(0, resumeOffset);
   edPlaySource  = src;
   edIsPlaying   = true;
-  edPlayStart   = ctx.currentTime;
+  edPlayStart   = ctx.currentTime - resumeOffset;
 
   document.getElementById('ed-play-btn').classList.add('active');
   document.getElementById('ed-stop-btn').disabled = false;
@@ -1667,8 +1786,8 @@ function writeMidi(notes, bpm, steps, stepBeats) {
 function edExportMidi() {
   if (edNotes.length === 0) { edSetStatus('nothing to export'); return; }
   const bpm    = parseFloat(document.getElementById('ed-bpm').value) || 120;
-  const steps  = parseInt(document.getElementById('ed-steps').value);
-  const stepB  = parseFloat(document.getElementById('ed-stepsize').value);
+  const steps  = edGetSteps();
+  const stepB  = edGetStepBeats();
 
   const buf  = writeMidi(edNotes, bpm, steps, stepB);
   const blob = new Blob([buf], {type: 'audio/midi'});
@@ -1820,13 +1939,14 @@ function edImportMidi(input) {
 
       // update controls
       document.getElementById('ed-bpm').value = Math.min(220, Math.max(60, bpm));
-      document.getElementById('ed-stepsize').value =
-        [0.25, 0.5, 1.0].reduce((a,b) => Math.abs(b-stepBeats) < Math.abs(a-stepBeats) ? b : a);
+      const closestStepB = [0.25, 0.5, 1.0].reduce((a,b) => Math.abs(b-stepBeats) < Math.abs(a-stepBeats) ? b : a);
+      document.getElementById('ed-stepsize').value = closestStepB;
 
-      const stepsSel = document.getElementById('ed-steps');
-      const validSteps = [8, 16, 32];
-      const best = validSteps.reduce((a,b) => (b >= gridSteps && b < a) ? b : a, 32);
-      stepsSel.value = best;
+      // compute bar count from imported steps
+      const spb = edGetStepsPerBar(closestStepB);
+      edBarCount = Math.max(1, Math.ceil(gridSteps / spb));
+      document.getElementById('ed-bars-display').textContent = edBarCount;
+      const best = edBarCount * spb;
 
       edNotes  = filtered;
       edBuilt  = 0;
