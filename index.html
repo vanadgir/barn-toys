@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>barn</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;700&family=IBM+Plex+Sans:wght@300;400;700&display=swap');
+
+    :root {
+      --bg: #080c10;
+      --bg2: #0e1318;
+      --accent: #c8a84b;
+      --accent2: #4b8bc8;
+      --text: #c8c8bc;
+      --muted: #555e68;
+      --border: #1e2830;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'IBM Plex Mono', monospace;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ocean particles */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 80% 60% at 50% 100%, rgba(30,60,90,0.18) 0%, transparent 70%),
+        radial-gradient(ellipse 40% 30% at 20% 80%, rgba(75,139,200,0.07) 0%, transparent 60%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .container {
+      position: relative;
+      z-index: 1;
+      max-width: 680px;
+      margin: 0 auto;
+      padding: 80px 24px 120px;
+    }
+
+    /* --- HEADER --- */
+    .header {
+      display: flex;
+      align-items: flex-end;
+      gap: 28px;
+      margin-bottom: 56px;
+    }
+
+    .pfp-wrap {
+      position: relative;
+      flex-shrink: 0;
+    }
+
+    .pfp {
+      width: 96px;
+      height: 96px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 2px solid var(--accent);
+      display: block;
+      filter: saturate(0.85);
+    }
+
+    .pfp-wrap::after {
+      content: '';
+      position: absolute;
+      inset: -6px;
+      border-radius: 50%;
+      border: 1px solid rgba(200,168,75,0.2);
+      animation: pulse 3s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 0.3; transform: scale(1); }
+      50% { opacity: 0.7; transform: scale(1.04); }
+    }
+
+    .header-text { flex: 1; }
+
+    .name {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 2.4rem;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: -0.02em;
+      line-height: 1;
+    }
+
+    .name span {
+      color: var(--accent);
+    }
+
+    .tagline {
+      margin-top: 8px;
+      font-size: 0.8rem;
+      color: var(--muted);
+      letter-spacing: 0.04em;
+    }
+
+    /* --- BIO --- */
+    .bio {
+      font-family: 'IBM Plex Sans', sans-serif;
+      font-size: 0.95rem;
+      line-height: 1.7;
+      color: var(--text);
+      margin-bottom: 48px;
+    }
+
+    .bio a {
+      color: var(--accent);
+      text-decoration: none;
+      border-bottom: 1px solid rgba(200,168,75,0.3);
+      transition: border-color 0.2s;
+    }
+
+    .bio a:hover { border-color: var(--accent); }
+
+    /* --- SECTION --- */
+    .section-label {
+      font-size: 0.65rem;
+      letter-spacing: 0.2em;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 16px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* --- PROJECT GRID --- */
+    .projects {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 48px;
+    }
+
+    .project-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 18px 20px;
+      text-decoration: none;
+      color: var(--text);
+      transition: border-color 0.2s, background 0.2s;
+      display: block;
+    }
+
+    .project-card:hover {
+      border-color: var(--accent2);
+      background: #0f1820;
+    }
+
+    .project-card.wide {
+      grid-column: span 2;
+    }
+
+    .card-title {
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 4px;
+    }
+
+    .card-desc {
+      font-size: 0.75rem;
+      color: var(--muted);
+      line-height: 1.5;
+      font-family: 'IBM Plex Sans', sans-serif;
+    }
+
+    .card-tag {
+      display: inline-block;
+      margin-top: 10px;
+      font-size: 0.6rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent2);
+      background: rgba(75,139,200,0.1);
+      border-radius: 3px;
+      padding: 2px 6px;
+    }
+
+    /* --- LINKS ROW --- */
+    .links {
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+      margin-bottom: 64px;
+    }
+
+    .link-item {
+      font-size: 0.8rem;
+      color: var(--muted);
+      text-decoration: none;
+      letter-spacing: 0.05em;
+      transition: color 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .link-item:hover { color: var(--text); }
+    .link-item .dot { color: var(--accent); font-size: 1.1em; }
+
+    /* --- FOOTER --- */
+    .footer {
+      font-size: 0.7rem;
+      color: var(--border);
+      letter-spacing: 0.08em;
+      text-align: center;
+      padding-top: 32px;
+      border-top: 1px solid var(--border);
+    }
+
+    /* --- PIZZA EASTER EGG --- */
+    #pizza-btn {
+      position: fixed;
+      bottom: 24px;
+      right: 28px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 1.5rem;
+      opacity: 0.2;
+      transition: opacity 0.3s, transform 0.3s;
+      z-index: 100;
+    }
+    #pizza-btn:hover {
+      opacity: 1;
+      transform: rotate(-12deg) scale(1.15);
+    }
+
+    #pizza-popup {
+      position: fixed;
+      bottom: 70px;
+      right: 24px;
+      background: var(--bg2);
+      border: 1px solid var(--accent);
+      border-radius: 6px;
+      padding: 10px 16px;
+      font-size: 0.75rem;
+      color: var(--accent);
+      display: none;
+      z-index: 100;
+      white-space: nowrap;
+    }
+
+    @media (max-width: 520px) {
+      .projects { grid-template-columns: 1fr; }
+      .project-card.wide { grid-column: span 1; }
+      .header { flex-direction: column; align-items: flex-start; }
+      .name { font-size: 1.8rem; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+
+  <div class="header">
+    <div class="pfp-wrap">
+      <img class="pfp" src="barnacle.png" alt="barn">
+    </div>
+    <div class="header-text">
+      <div class="name">barn<span>.</span></div>
+      <div class="tagline">// varun &nbsp;·&nbsp; gamin &nbsp;·&nbsp; probably eating pizza</div>
+    </div>
+  </div>
+
+  <div class="bio">
+    i make stuff on the internet. games, tools, weird little experiments.
+    also i play a lot of league and i like pizza.<br><br>
+    this is my corner. poke around.
+  </div>
+
+  <div class="section-label">toys</div>
+  <div class="projects">
+
+    <a class="project-card" href="https://varun.pro/drawble" target="_blank">
+      <div class="card-title">drawble</div>
+      <div class="card-desc">draw with friends in real time. collaborative cursed art.</div>
+      <span class="card-tag">canvas</span>
+    </a>
+
+    <a class="project-card" href="https://varun.pro/fill4" target="_blank">
+      <div class="card-title">fill4</div>
+      <div class="card-desc">connect four but it fills up from the bottom. idk it's fun.</div>
+      <span class="card-tag">game</span>
+    </a>
+
+    <a class="project-card" href="https://varun.pro/sketches/mapgen" target="_blank">
+      <div class="card-title">mapgen</div>
+      <div class="card-desc">procedural map generator. click to get a new world.</div>
+      <span class="card-tag">generative</span>
+    </a>
+
+    <a class="project-card" href="https://varun.pro/projects/hexgrid" target="_blank">
+      <div class="card-title">hexgrid</div>
+      <div class="card-desc">hex grid playground. doesn't have to do anything specific.</div>
+      <span class="card-tag">grid</span>
+    </a>
+
+    <a class="project-card wide" href="https://soundcloud.com/barntunes/nerfsinged" target="_blank">
+      <div class="card-title">nerf singed (song)</div>
+      <div class="card-desc">a song i made. about nerfing singed. it's exactly what it sounds like.</div>
+      <span class="card-tag">music</span>
+    </a>
+
+  </div>
+
+  <div class="section-label">find me</div>
+  <div class="links">
+    <a class="link-item" href="https://twitch.tv/barnaido" target="_blank">
+      <span class="dot">·</span> twitch.tv/barnaido
+    </a>
+    <a class="link-item" href="https://soundcloud.com/barntunes" target="_blank">
+      <span class="dot">·</span> soundcloud
+    </a>
+    <a class="link-item" href="https://github.com" target="_blank">
+      <span class="dot">·</span> github
+    </a>
+    <a class="link-item" href="https://varun.pro" target="_blank">
+      <span class="dot">·</span> varun.pro
+    </a>
+  </div>
+
+  <div class="footer">
+    barn &nbsp;·&nbsp; built in a discord server &nbsp;·&nbsp; idk man
+  </div>
+
+</div>
+
+<button id="pizza-btn" title="🍕" onclick="togglePizza()">🍕</button>
+<div id="pizza-popup">i like pizza</div>
+
+<script>
+  let shown = false;
+  function togglePizza() {
+    shown = !shown;
+    document.getElementById('pizza-popup').style.display = shown ? 'block' : 'none';
+  }
+
+  // subtle floating particles
+  const canvas = document.createElement('canvas');
+  canvas.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:0;opacity:0.35';
+  document.body.prepend(canvas);
+  const ctx = canvas.getContext('2d');
+
+  let W, H, pts;
+
+  function resize() {
+    W = canvas.width = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+    pts = Array.from({length: 40}, () => ({
+      x: Math.random() * W,
+      y: Math.random() * H,
+      r: Math.random() * 1.2 + 0.3,
+      dx: (Math.random() - 0.5) * 0.15,
+      dy: -Math.random() * 0.25 - 0.05,
+      o: Math.random() * 0.5 + 0.1
+    }));
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    for (const p of pts) {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(75,139,200,${p.o})`;
+      ctx.fill();
+      p.x += p.dx;
+      p.y += p.dy;
+      if (p.y < -5) { p.y = H + 5; p.x = Math.random() * W; }
+      if (p.x < -5) p.x = W + 5;
+      if (p.x > W + 5) p.x = -5;
+    }
+    requestAnimationFrame(draw);
+  }
+
+  window.addEventListener('resize', resize);
+  resize();
+  draw();
+</script>
+
+</body>
+</html>
