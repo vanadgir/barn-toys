@@ -933,6 +933,8 @@ let edUndoStack   = [];          // snapshots of edNotes for undo
 const ED_UNDO_MAX = 20;
 let edCursorStep  = 0;           // step to restart playback from (spacebar)
 let edCursorOfs   = 0;           // pending resume offset in seconds for next play
+let edMouseDownCell = null;      // { row, step, midi, ctrl } — tracks the cell where mousedown fired
+let edDragged     = false;       // true once mouseenter fires on a different cell during drag
 
 function getCtx() {
   if (!audioCtx) {
@@ -1426,24 +1428,22 @@ function buildEdGrid(steps) {
 
       cell.addEventListener('mousedown', e => {
         e.preventDefault();
-        if (e.shiftKey) {
-          // start drag-select
-          edSelecting = true;
-          edSelBox = { r1: row, s1: s, r2: row, s2: s };
-          edUpdateSelBox();
-        } else {
-          if (!e.ctrlKey && !e.metaKey) edClearSelection();
-          edCellClick(midi, s, row, cell);
-        }
+        edMouseDownCell = { row, step: s, midi, ctrl: e.ctrlKey || e.metaKey };
+        edDragged = false;
+        // action (toggle note or finalize selection) fires on mouseup, not here
       });
       cell.addEventListener('mouseenter', e => {
-        if (e.buttons !== 1) return;
-        if (edSelecting) {
+        if (e.buttons !== 1 || !edMouseDownCell) return;
+        if (!edDragged) {
+          // first move to a different cell — kick off box-select
+          edDragged = true;
+          edSelecting = true;
+          if (!edMouseDownCell.ctrl) edClearSelection();
+          edSelBox = { r1: edMouseDownCell.row, s1: edMouseDownCell.step, r2: row, s2: s };
+        } else if (edSelecting) {
           edSelBox.r2 = row; edSelBox.s2 = s;
-          edUpdateSelBox();
-        } else {
-          edCellClick(midi, s, row, cell);
         }
+        edUpdateSelBox();
       });
 
       edCellMap.set(`${row}-${s}`, cell);
@@ -1658,7 +1658,15 @@ document.addEventListener('mouseup', () => {
   if (edSelecting) {
     edFinalizeSelBox();
     edSelecting = false;
+  } else if (edMouseDownCell && !edDragged) {
+    // plain click (no drag) — toggle note
+    const { row, step, midi: m, ctrl } = edMouseDownCell;
+    if (!ctrl) edClearSelection();
+    const c = edCellMap.get(`${row}-${step}`);
+    if (c) edCellClick(m, step, row, c);
   }
+  edMouseDownCell = null;
+  edDragged = false;
 });
 
 document.addEventListener('keydown', e => {
