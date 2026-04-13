@@ -1414,6 +1414,7 @@
         <div class="radio-time" id="radio-time">0:00 / 0:00</div>
         <input class="radio-vol-slider" id="radio-vol" type="range" min="0" max="1.15" step="0.01" value="0.8" oninput="radioSetVol(this.value)">
         <button class="radio-btn" id="radio-btn-playpause" onclick="radioTogglePlay()">▶</button>
+        <button class="radio-btn" onclick="radioStop()" title="stop">■</button>
         <button class="radio-btn" id="radio-btn-loop" onclick="radioToggleLoop()" title="loop">⟳</button>
         <button class="radio-btn" id="radio-btn-shuffle" onclick="radioToggleShuffle()" title="shuffle">⇄</button>
         <button class="radio-btn" onclick="radioNext()" title="next">⏭</button>
@@ -4235,6 +4236,22 @@ function radioPlayTrack() {
   });
 }
 
+function radioStop() {
+  if (radioAnimFrame) { cancelAnimationFrame(radioAnimFrame); radioAnimFrame = null; }
+  if (radioAudio) { radioAudio.pause(); radioAudio.src = ''; radioAudio = null; }
+  radioTrack = null;
+  radioLayout = null;
+  radioUserPaused = false;
+  document.getElementById('radio-title').textContent = '';
+  document.getElementById('radio-meta').textContent = '';
+  document.getElementById('radio-time').textContent = '0:00 / 0:00';
+  document.getElementById('radio-progress-fill').style.width = '0%';
+  const ppBtn = document.getElementById('radio-btn-playpause');
+  if (ppBtn) ppBtn.textContent = '▶';
+  document.querySelectorAll('.radio-track-item').forEach(el => el.classList.remove('active'));
+  radioDrawIdle();
+}
+
 function radioDrawIdle() {
   const canvas = document.getElementById('radio-canvas');
   if (!canvas) return;
@@ -4249,17 +4266,17 @@ function radioDrawIdle() {
   ctx.fillStyle = '#080c10';
   ctx.fillRect(0, 0, W, H);
 
-  // splash if loaded
+  // splash — big and centered
   if (radioSplash && radioSplash.complete) {
     const aspect = radioSplash.width / radioSplash.height;
-    const dh = H * 0.6, dw = dh * aspect;
-    ctx.globalAlpha = 0.06;
+    const dh = H * 0.85, dw = dh * aspect;
+    ctx.globalAlpha = 0.12;
     ctx.drawImage(radioSplash, (W - dw) / 2, (H - dh) / 2, dw, dh);
     ctx.globalAlpha = 1;
   }
 
   // prompt box
-  const msg  = 'pick a tune →';
+  const msg  = 'pick a tune';
   const pad  = 14;
   ctx.font   = '11px IBM Plex Mono, monospace';
   const tw   = ctx.measureText(msg).width;
@@ -4269,15 +4286,15 @@ function radioDrawIdle() {
   const by   = (H - bh) / 2;
 
   ctx.fillStyle   = '#0e1318';
-  ctx.strokeStyle = '#c8a84b44';
+  ctx.strokeStyle = 'rgba(200,168,75,0.28)';
   ctx.lineWidth   = 1;
   ctx.beginPath();
   ctx.roundRect(bx, by, bw, bh, 4);
   ctx.fill();
   ctx.stroke();
 
-  ctx.fillStyle  = '#c8a84b';
-  ctx.textAlign  = 'center';
+  ctx.fillStyle    = '#c8a84b';
+  ctx.textAlign    = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(msg, W / 2, H / 2);
   ctx.textAlign    = 'left';
