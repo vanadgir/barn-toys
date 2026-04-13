@@ -2618,7 +2618,9 @@ function cbGetSpb() {
 
 function buildCbKeys() {
   const el = document.getElementById('ed-keys');
-  if (!el || el.children.length) return;
+  if (!el) return;
+  // always rebuild — editor may have left click handlers on keys
+  while (el.firstChild) el.removeChild(el.firstChild);
   buildPianoKeys(el, null); // display-only in collab (no local preview)
 }
 
@@ -3043,7 +3045,14 @@ function ensureWS(callback) {
     const check = setInterval(() => {
       if (wsReady) { clearInterval(check); callback(); }
     }, 100);
-    setTimeout(() => clearInterval(check), 8000);
+    setTimeout(() => {
+      clearInterval(check);
+      if (!wsReady) {
+        edCollabPending = false;
+        const btn = document.getElementById('ed-collab-btn');
+        if (btn) btn.textContent = '⇄ collab';
+      }
+    }, 8000);
   }
 }
 
