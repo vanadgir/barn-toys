@@ -664,6 +664,46 @@
       z-index: 5;
     }
 
+    /* ── measure bar ── */
+    .ed-measure-bar {
+      display: flex;
+      height: 16px;
+      flex-shrink: 0;
+      position: relative;
+      background: #111120;
+      border-bottom: 1px solid rgba(75,139,200,0.2);
+      user-select: none;
+    }
+    .ed-measure-cell {
+      width: 40px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.42rem;
+      color: rgba(255,255,255,0.18);
+      border-right: 1px solid rgba(20,30,40,0.7);
+      padding-left: 3px;
+      box-sizing: border-box;
+      cursor: default;
+    }
+    .ed-measure-cell.bar-start {
+      border-left: 2px solid rgba(75,139,200,0.3);
+      color: rgba(255,255,255,0.45);
+      font-weight: 600;
+    }
+    .ed-measure-bar.interactive { cursor: crosshair; }
+    .ed-measure-bar.interactive .ed-measure-cell { cursor: crosshair; }
+    .ed-loop-region {
+      position: absolute;
+      top: 0; bottom: 0;
+      background: rgba(200,168,75,0.15);
+      border-left: 2px solid rgba(200,168,75,0.7);
+      border-right: 2px solid rgba(200,168,75,0.7);
+      pointer-events: none;
+      z-index: 2;
+    }
+
     /* ── editor footer ── */
     .ed-ftr {
       display: flex;
@@ -887,6 +927,10 @@
       <div class="ed-sep"></div>
       <button class="ed-btn primary" id="ed-play-btn" onclick="edPlay()">▶ play</button>
       <button class="ed-btn stop" id="ed-stop-btn" onclick="edStop()" disabled>■ stop</button>
+      <label style="display:flex;align-items:center;gap:4px;font-family:'IBM Plex Mono',monospace;font-size:0.55rem;color:var(--muted);cursor:pointer;margin-left:6px;white-space:nowrap">
+        <input type="checkbox" id="ed-loop-toggle" onchange="edToggleLoop()" style="cursor:pointer;accent-color:var(--accent)">
+        loop
+      </label>
       <div class="ed-sep"></div>
       <button class="ed-btn" onclick="edClear(false)">clear track</button>
       <button class="ed-btn danger" onclick="edClear(true)">clear all</button>
@@ -985,6 +1029,15 @@
         <div class="ed-group">
           <span class="ed-label">role</span>
           <div class="cb-role-switch" id="cb-role-switch"></div>
+        </div>
+        <div class="ed-sep"></div>
+        <div class="ed-group" id="cb-inst-group">
+          <span class="ed-label">sound</span>
+          <select class="ed-track-sf-sel" id="cb-inst-sf" onchange="cbInstSfChange()">
+            <option value="pokemon">Pokemon</option>
+            <option value="megadrive">Megadrive</option>
+          </select>
+          <select class="ed-track-inst-sel" id="cb-inst-prog" onchange="cbInstProgChange()"></select>
         </div>
         <div class="ed-sep"></div>
         <button class="ed-btn" onclick="cbLeave()">leave</button>
@@ -1180,6 +1233,32 @@ function refreshNoteGrid(notes, cellMap, layerFn) {
   });
 }
 
+/**
+ * Build a measure-number bar as first child of innerEl.
+ * Shows bar numbers and step dividers. Call after buildNoteGrid.
+ * @param {HTMLElement} innerEl   - the .ed-roll-inner div
+ * @param {number}      steps     - total step count
+ * @param {number}      spb       - steps per bar
+ * @param {boolean}     interactive - if true, adds crosshair cursor (editor loop drag)
+ */
+function buildMeasureBar(innerEl, steps, spb, interactive) {
+  innerEl.querySelectorAll('.ed-measure-bar').forEach(el => el.remove());
+  const bar = document.createElement('div');
+  bar.className = 'ed-measure-bar' + (interactive ? ' interactive' : '');
+  const overlay = document.createElement('div');
+  overlay.className = 'ed-loop-region';
+  overlay.style.display = 'none';
+  bar.appendChild(overlay);
+  for (let s = 0; s < steps; s++) {
+    const cell = document.createElement('div');
+    cell.className = 'ed-measure-cell' + (s % spb === 0 ? ' bar-start' : '');
+    cell.dataset.step = s;
+    if (s % spb === 0) cell.textContent = s / spb + 1;
+    bar.appendChild(cell);
+  }
+  innerEl.insertBefore(bar, innerEl.firstChild);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // SHARED AUDIO + WS STATE
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1214,6 +1293,10 @@ let edCursorStep  = 0;           // step to restart playback from (spacebar)
 let edCursorOfs   = 0;           // pending resume offset in seconds for next play
 let edMouseDownCell = null;      // { row, step, midi, ctrl } — tracks the cell where mousedown fired
 let edDragged     = false;       // true once mouseenter fires on a different cell during drag
+let edLoopStart    = 0;          // loop region start in steps
+let edLoopEnd      = -1;         // loop region end in steps (-1 = full length)
+let edLoopEnabled  = false;      // loop region active
+let edLoopDragging = false;      // measure bar drag in progress
 
 function getCtx() {
   if (!audioCtx) {
@@ -1677,10 +1760,11 @@ function buildEdKeys() {
 function buildEdGrid(steps) {
   if (steps === edBuilt && edCellMap.size > 0) return;
   edBuilt = steps;
+  const spb = edGetStepsPerBar();
   buildNoteGrid(
     document.getElementById('ed-roll-inner'),
     steps,
-    edGetStepsPerBar(),
+    spb,
     edCellMap,
     document.getElementById('ed-playhead'),
     (cell, midi, s, row) => {
@@ -1703,6 +1787,9 @@ function buildEdGrid(steps) {
       });
     }
   );
+  buildMeasureBar(document.getElementById('ed-roll-inner'), steps, spb, true);
+  edSetupLoopDrag();
+  edUpdateLoopOverlay();
   edRefreshGrid();
 }
 
@@ -1796,6 +1883,21 @@ function edDeleteSelected() {
   edScheduleLiveUpdate();
 }
 
+function edShiftNotes(stepDelta, noteDelta) {
+  if (!edSelected.size) return;
+  edPushUndo();
+  const totalSteps = edGetSteps();
+  edNotes = edNotes.map((n, i) => {
+    if (!edSelected.has(i)) return n;
+    const newStep = Math.max(0, Math.min(totalSteps - (n.duration || 1), n.step + stepDelta));
+    const newNote = Math.max(NOTE_BOT, Math.min(NOTE_TOP, n.note + noteDelta));
+    return { ...n, step: newStep, note: newNote };
+  });
+  edRefreshGrid();
+  edUpdateFooter();
+  edScheduleLiveUpdate();
+}
+
 function edDuplicateSelected() {
   if (!edSelected.size) return;
   const sel = [...edSelected].map(i => edNotes[i]);
@@ -1814,6 +1916,63 @@ function edDuplicateSelected() {
   edRefreshGrid();
   edUpdateFooter();
   edScheduleLiveUpdate();
+}
+
+// ── loop region ───────────────────────────────────────────────────────────────
+function edToggleLoop() {
+  edLoopEnabled = document.getElementById('ed-loop-toggle').checked;
+  edUpdateLoopOverlay();
+  edApplyLoopToSource();
+}
+
+function edUpdateLoopOverlay() {
+  const overlay = document.querySelector('#ed-roll-inner .ed-loop-region');
+  if (!overlay) return;
+  const steps = edGetSteps();
+  const end   = edLoopEnd < 0 ? steps : edLoopEnd;
+  if (!edLoopEnabled || edLoopStart >= end) {
+    overlay.style.display = 'none';
+    return;
+  }
+  overlay.style.display = 'block';
+  overlay.style.left    = (edLoopStart * 40) + 'px';
+  overlay.style.width   = ((end - edLoopStart) * 40) + 'px';
+}
+
+function edApplyLoopToSource() {
+  if (!edPlaySource) return;
+  const bpm   = parseFloat(document.getElementById('ed-bpm').value) || 120;
+  const stepB = edGetStepBeats();
+  const steps = edGetSteps();
+  const end   = edLoopEnd < 0 ? steps : edLoopEnd;
+  edPlaySource.loopStart = edLoopEnabled ? edLoopStart * stepB * (60 / bpm) : 0;
+  edPlaySource.loopEnd   = edLoopEnabled ? end * stepB * (60 / bpm) : steps * stepB * (60 / bpm);
+}
+
+function edSetupLoopDrag() {
+  const bar = document.querySelector('#ed-roll-inner .ed-measure-bar');
+  if (!bar) return;
+  bar.addEventListener('mousedown', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    const rect  = bar.getBoundingClientRect();
+    const s     = Math.max(0, Math.floor((e.clientX - rect.left) / 40));
+    edLoopStart = s;
+    edLoopEnd   = Math.min(edGetSteps(), s + edGetStepsPerBar());
+    edLoopEnabled = true;
+    document.getElementById('ed-loop-toggle').checked = true;
+    edLoopDragging = true;
+    edUpdateLoopOverlay();
+    edApplyLoopToSource();
+  });
+  bar.addEventListener('mousemove', e => {
+    if (!edLoopDragging) return;
+    const rect = bar.getBoundingClientRect();
+    const s    = Math.ceil((e.clientX - rect.left) / 40);
+    edLoopEnd  = Math.min(edGetSteps(), Math.max(edLoopStart + 1, s));
+    edUpdateLoopOverlay();
+    edApplyLoopToSource();
+  });
 }
 
 // drag-select box
@@ -1884,7 +2043,17 @@ document.getElementById('ed-stepsize').addEventListener('change', () => {
   edUpdateFooter();
 });
 
+// live BPM — re-render if playing
+document.getElementById('ed-bpm').addEventListener('input', () => {
+  edUpdateFooter();
+  edScheduleLiveUpdate();
+});
+
 document.addEventListener('mouseup', () => {
+  if (edLoopDragging) {
+    edLoopDragging = false;
+    return;
+  }
   if (edSelecting) {
     edFinalizeSelBox();
     edSelecting = false;
@@ -1937,6 +2106,14 @@ document.addEventListener('keydown', e => {
     if (e.key === 'a') { e.preventDefault(); edSelectAll(); }
     if (e.key === 'd') { e.preventDefault(); edDuplicateSelected(); }
     if (e.key === 'z') { e.preventDefault(); edUndo(); }
+    return;
+  }
+
+  // arrow keys — shift selected notes
+  if (edSelected.size > 0 && !inInput) {
+    const dx = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+    const dy = e.key === 'ArrowUp'    ? 1 : e.key === 'ArrowDown'  ? -1 : 0;
+    if (dx || dy) { e.preventDefault(); edShiftNotes(dx, dy); return; }
   }
 });
 
@@ -2086,6 +2263,9 @@ async function edReceiveAudio(msg) {
   edPlaySource  = src;
   edIsPlaying   = true;
   edPlayStart   = ctx.currentTime - resumeOffset;
+
+  // apply loop region if enabled
+  if (edLoopEnabled) edApplyLoopToSource();
 
   document.getElementById('ed-play-btn').classList.add('active');
   document.getElementById('ed-stop-btn').disabled = false;
@@ -2430,6 +2610,12 @@ let cbSteps         = 32;
 let cbStepBeats     = 0.5;
 let cbAudioSource   = null;
 let cbIsPlaying     = false;
+let cbSf            = 'pokemon';
+let cbRoleInstruments = {
+  lead:  { bank: 0,   program: 80 },
+  bass:  { bank: 0,   program: 38 },
+  drums: { bank: 128, program: 0  },
+};
 
 const CB_ROLES      = ['lead', 'bass', 'drums'];
 const CB_ROLE_ICONS = { lead: '♪', bass: '♩', drums: '♦' };
@@ -2479,14 +2665,16 @@ function buildCbKeys() {
 function buildCbGrid(steps) {
   if (steps === cbBuilt && cbCellMap.size > 0) return;
   cbBuilt = steps;
+  const spb = cbGetSpb();
   buildNoteGrid(
     document.getElementById('cb-roll-inner'),
     steps,
-    cbGetSpb(),
+    spb,
     cbCellMap,
     document.getElementById('cb-playhead'),
     (cell, midi, s) => cell.addEventListener('click', () => cbCellClick(midi, s))
   );
+  buildMeasureBar(document.getElementById('cb-roll-inner'), steps, spb, false);
   cbRefreshGrid();
 }
 
@@ -2640,6 +2828,48 @@ function cbClearAll() {
   ws.send(JSON.stringify({ type: 'collab_clear' }));
 }
 
+// ── collab instrument picker ──────────────────────────────────────────────────
+function cbBuildInstPicker() {
+  const role   = cbMyRole;
+  const sfSel  = document.getElementById('cb-inst-sf');
+  const pgSel  = document.getElementById('cb-inst-prog');
+  if (!sfSel || !pgSel || !role) return;
+
+  // sf selector
+  sfSel.value = cbSf;
+
+  // program options — drums role always uses bank 128, others bank 0/1
+  const inst     = cbRoleInstruments[role] || {};
+  const bankNum  = role === 'drums' ? 128 : (inst.bank ?? 0);
+  const sfData   = INST_DATA[cbSf];
+  const presets  = sfData?.banks[bankNum] || [];
+  pgSel.innerHTML = presets.map(([p, name]) => `<option value="${p}">${name}</option>`).join('');
+  pgSel.value = inst.program ?? presets[0]?.[0] ?? 0;
+}
+
+function cbInstSfChange() {
+  cbSf = document.getElementById('cb-inst-sf').value;
+  cbBuildInstPicker(); // repopulate programs for new sf
+  cbSendInstChange();
+}
+
+function cbInstProgChange() {
+  if (!cbMyRole) return;
+  const prog = parseInt(document.getElementById('cb-inst-prog').value);
+  const bank = cbMyRole === 'drums' ? 128 : (cbRoleInstruments[cbMyRole]?.bank ?? 0);
+  cbRoleInstruments[cbMyRole] = { bank, program: prog };
+  cbSendInstChange();
+}
+
+function cbSendInstChange() {
+  if (!wsReady || !cbInRoom || !cbMyRole) return;
+  const inst = cbRoleInstruments[cbMyRole];
+  ws.send(JSON.stringify({
+    type: 'collab_inst_change',
+    bank: inst.bank, program: inst.program, sf: cbSf,
+  }));
+}
+
 // handle collab WS messages (called from ws.onmessage)
 async function cbHandleMessage(msg) {
   if (msg.type === 'collab_room_info') {
@@ -2656,12 +2886,17 @@ async function cbHandleMessage(msg) {
     cbSteps      = msg.state.steps;
     cbStepBeats  = msg.state.step_beats;
     cbNotes      = msg.state.notes || [];
+    cbSf         = msg.state.sf || 'pokemon';
+    if (msg.state.instruments) {
+      Object.assign(cbRoleInstruments, msg.state.instruments);
+    }
     document.getElementById('cb-bpm').value = cbBpm;
     cbShowRoom(msg.code);
     cbUpdateUsers(msg.users);
     buildCbKeys();
     buildCbGrid(cbSteps);
     cbRefreshGrid();
+    cbBuildInstPicker();
     document.getElementById('cb-note-count').textContent = cbNotes.length;
     if (activeTab !== 'collab') switchTab('collab');
     return;
@@ -2675,7 +2910,10 @@ async function cbHandleMessage(msg) {
     if (msg.type === 'collab_roles_update') {
       // update my role if it changed (only on collab_change_role responses)
       const me = msg.users.find(u => u.color_idx === cbMyColorIdx);
-      if (me) cbMyRole = me.role;
+      if (me && me.role !== cbMyRole) {
+        cbMyRole = me.role;
+        cbBuildInstPicker(); // refresh picker for new role
+      }
     }
     cbUpdateUsers(msg.users);
     return;
@@ -2695,6 +2933,13 @@ async function cbHandleMessage(msg) {
   }
   if (msg.type === 'collab_audio') {
     await cbReceiveAudio(msg.audio, msg.bpm, msg.steps, msg.step_beats);
+    return;
+  }
+  if (msg.type === 'collab_inst_change') {
+    cbRoleInstruments[msg.role] = { bank: msg.bank, program: msg.program };
+    cbSf = msg.sf || cbSf;
+    // if it's my role, refresh the picker UI to reflect the change
+    if (msg.role === cbMyRole) cbBuildInstPicker();
     return;
   }
   if (msg.type === 'collab_clear') {
