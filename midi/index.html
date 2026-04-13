@@ -823,6 +823,20 @@
       white-space: nowrap;
       letter-spacing: 0.04em;
     }
+    .cb-user-pill.is-me { cursor: pointer; }
+    .cb-user-pill.is-me:hover { opacity: 0.8; }
+    .cb-user-pill input.rename-input {
+      background: none; border: none; outline: none;
+      font: inherit; color: inherit; width: 80px;
+      padding: 0; cursor: text;
+    }
+    /* cursor dots on grid cells */
+    .ed-cell { position: relative; }
+    .cb-cursor-dot {
+      position: absolute; top: 2px; right: 2px;
+      width: 5px; height: 5px; border-radius: 50%;
+      pointer-events: none; z-index: 5;
+    }
     .cb-users-wrap {
       display: flex;
       gap: 5px;
@@ -2656,7 +2670,10 @@ function buildCbGrid(steps) {
     spb,
     cbCellMap,
     document.getElementById('ed-playhead'),
-    (cell, midi, s) => cell.addEventListener('click', () => cbCellClick(midi, s))
+    (cell, midi, s) => {
+      cell.addEventListener('click', () => cbCellClick(midi, s));
+      cell.addEventListener('mouseenter', () => cbSendCursor(midi, s));
+    }
   );
   buildMeasureBar(document.getElementById('ed-roll-inner'), steps, spb, false);
   cbRefreshGrid();
@@ -2697,9 +2714,14 @@ function cbUpdateUsers(users) {
   cbRoomUsers = users;
   const el = document.getElementById('cb-users');
   if (el) {
-    el.innerHTML = users.map(u =>
-      `<span class="cb-user-pill" style="border-color:${u.color};color:${u.color}">${u.is_host ? '★ ' : ''}${CB_ROLE_ICONS[u.role] || ''} ${u.name}</span>`
-    ).join('');
+    el.innerHTML = users.map(u => {
+      const isMe = u.color_idx === cbMyColorIdx;
+      return `<span class="cb-user-pill${isMe ? ' is-me' : ''}"
+        style="border-color:${u.color};color:${u.color}"
+        title="${isMe ? 'click to rename' : ''}"
+        ${isMe ? 'onclick="cbStartRename(this)"' : ''}>
+        ${u.is_host ? '★ ' : ''}${CB_ROLE_ICONS[u.role] || ''} ${u.name}</span>`;
+    }).join('');
   }
   // update role switcher in toolbar
   const sw = document.getElementById('cb-role-switch');
@@ -2715,6 +2737,64 @@ function cbUpdateUsers(users) {
       >${CB_ROLE_ICONS[r]} ${r}</button>`;
     }).join('');
   }
+}
+
+// ── name change ───────────────────────────────────────────────────────────────
+function cbStartRename(pill) {
+  if (pill.querySelector('.rename-input')) return; // already editing
+  const currentName = pill.textContent.replace(/^[★♪♩♦]\s*/, '').trim();
+  const input = document.createElement('input');
+  input.className = 'rename-input';
+  input.value     = currentName;
+  input.maxLength = 20;
+  pill.innerHTML  = '';
+  pill.appendChild(input);
+  input.focus();
+  input.select();
+  function commit() {
+    const name = input.value.trim() || currentName;
+    if (name !== currentName && wsReady && cbInRoom) {
+      ws.send(JSON.stringify({ type: 'collab_rename', name }));
+    }
+    pill.textContent = name;
+  }
+  input.addEventListener('blur', commit);
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') input.blur(); if (e.key === 'Escape') { input.value = currentName; input.blur(); } });
+}
+
+// ── cursors ───────────────────────────────────────────────────────────────────
+const cbCursors = new Map(); // user_idx → last cell el
+let cbCursorTimer = null;
+
+function cbSendCursor(midi, step) {
+  if (!wsReady || !cbInRoom) return;
+  clearTimeout(cbCursorTimer);
+  cbCursorTimer = setTimeout(() => {
+    ws.send(JSON.stringify({ type: 'collab_cursor', midi, step }));
+  }, 60);
+}
+
+function cbSetCursor(userIdx, color, midi, step) {
+  // remove from old cell
+  const oldEl = cbCursors.get(userIdx);
+  if (oldEl) { const dot = oldEl.querySelector(`.cb-cursor-dot[data-user="${userIdx}"]`); if (dot) dot.remove(); }
+  if (midi == null || step == null) { cbCursors.delete(userIdx); return; }
+  // find new cell
+  const rowIdx = NOTES.indexOf(midi);
+  if (rowIdx < 0) return;
+  const cell = cbCellMap.get(`${rowIdx}-${step}`);
+  if (!cell) return;
+  cbCursors.set(userIdx, cell);
+  const dot = document.createElement('div');
+  dot.className = 'cb-cursor-dot';
+  dot.dataset.user = userIdx;
+  dot.style.background = color;
+  cell.appendChild(dot);
+}
+
+function cbClearAllCursors() {
+  cbCursors.forEach((el, idx) => { const dot = el?.querySelector(`.cb-cursor-dot[data-user="${idx}"]`); if (dot) dot.remove(); });
+  cbCursors.clear();
 }
 
 function cbShowRoom(code) {
@@ -2954,6 +3034,11 @@ async function cbHandleMessage(msg) {
   }
   if (!cbInRoom) return;
   if (msg.type === 'collab_user_joined' || msg.type === 'collab_user_left' || msg.type === 'collab_roles_update') {
+    if (msg.type === 'collab_user_left') {
+      // clear their cursor
+      const gone = cbRoomUsers.find(u => !msg.users.find(v => v.color_idx === u.color_idx));
+      if (gone) cbSetCursor(gone.color_idx, null, null, null);
+    }
     if (msg.type === 'collab_roles_update') {
       // update my role if it changed (only on collab_change_role responses)
       const me = msg.users.find(u => u.color_idx === cbMyColorIdx);
@@ -3025,6 +3110,15 @@ async function cbHandleMessage(msg) {
     document.getElementById('ed-status').textContent = `import rejected by ${msg.rejector}`;
     return;
   }
+  if (msg.type === 'collab_cursor') {
+    const user = cbRoomUsers.find(u => u.color_idx === msg.user_idx);
+    if (user) cbSetCursor(msg.user_idx, user.color, msg.midi, msg.step);
+    return;
+  }
+  if (msg.type === 'collab_renamed') {
+    cbUpdateUsers(msg.users);
+    return;
+  }
 }
 
 // ── collab-in-editor helpers ──────────────────────────────────────────────────
@@ -3073,6 +3167,7 @@ function edExitCollabMode() {
 function edLeaveCollab() {
   if (!cbInRoom) { edExitCollabMode(); return; }
   if (wsReady) ws.send(JSON.stringify({ type: 'collab_leave' }));
+  cbClearAllCursors();
   cbInRoom    = false;
   cbRoomCode  = null;
   cbNotes     = [];
