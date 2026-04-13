@@ -1169,8 +1169,8 @@
 </div>
 
 <div class="tab-bar">
-  <button class="tab-btn active" id="tab-editor-btn" onclick="switchTab('editor')">editor</button>
-  <button class="tab-btn" id="tab-radio-btn" onclick="switchTab('radio')">radio</button>
+  <button class="tab-btn" id="tab-editor-btn" onclick="switchTab('editor')">editor</button>
+  <button class="tab-btn active" id="tab-radio-btn" onclick="switchTab('radio')">radio</button>
 </div>
 
 <div class="note-tip" id="note-tip">
@@ -1215,7 +1215,7 @@
 </div>
 
 <!-- ═══ EDITOR TAB ═══ -->
-<div class="tab-panel active" id="panel-editor">
+<div class="tab-panel" id="panel-editor">
   <div class="editor-panel">
 
     <!-- toolbar -->
@@ -1410,7 +1410,7 @@
 </div>
 
 <!-- ═══ RADIO TAB ═══ -->
-<div class="tab-panel" id="panel-radio">
+<div class="tab-panel active" id="panel-radio">
   <div class="radio-wrap">
     <div class="radio-bar">
       <div class="radio-title" id="radio-title">loading…</div>
@@ -1745,7 +1745,7 @@ function b64ToArrayBuffer(b64) {
 // ─────────────────────────────────────────────────────────────────────────────
 // TAB SWITCHING
 // ─────────────────────────────────────────────────────────────────────────────
-let activeTab = 'editor';
+let activeTab = 'radio';
 
 function switchTab(tab) {
   activeTab = tab;
