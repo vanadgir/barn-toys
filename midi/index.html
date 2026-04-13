@@ -1169,8 +1169,8 @@
 </div>
 
 <div class="tab-bar">
-  <button class="tab-btn" id="tab-editor-btn" onclick="switchTab('editor')">editor</button>
   <button class="tab-btn active" id="tab-radio-btn" onclick="switchTab('radio')">radio</button>
+  <button class="tab-btn" id="tab-editor-btn" onclick="switchTab('editor')">editor</button>
 </div>
 
 <div class="note-tip" id="note-tip">
@@ -4391,6 +4391,8 @@ buildTrackUI();
 buildEdGrid(edGetSteps());
 edUpdateFooter();
 initFromURL();
+// radio is default tab — kick off init immediately since switchTab won't fire on load
+radioInit();
 </script>
 </body>
 </html>
