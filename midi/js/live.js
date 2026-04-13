@@ -2,6 +2,7 @@
 // TAB SWITCHING
 // ─────────────────────────────────────────────────────────────────────────────
 let activeTab = 'radio';
+let savedEditorSearch = ''; // stash query params when switching away from editor
 
 function switchTab(tab) {
   activeTab = tab;
@@ -12,6 +13,7 @@ function switchTab(tab) {
   document.getElementById('panel-editor').classList.toggle('active', tab === 'editor');
   document.getElementById('panel-radio').classList.toggle('active', tab === 'radio');
   if (tab === 'radio') {
+    savedEditorSearch = location.search; // save before wiping
     history.replaceState(null, '', location.pathname + '#radio');
     if (typeof edStop === 'function' && edIsPlaying) edStop();
     radioInit();
@@ -22,6 +24,9 @@ function switchTab(tab) {
   } else {
     if (radioAnimFrame) { cancelAnimationFrame(radioAnimFrame); radioAnimFrame = null; }
     if (radioAudio) { radioAudio.pause(); }
+    if (savedEditorSearch) {
+      history.replaceState(null, '', location.pathname + savedEditorSearch + '#editor');
+    }
   }
 }
 
