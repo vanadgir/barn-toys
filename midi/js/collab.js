@@ -708,11 +708,33 @@ function edLeaveCollab() {
   edExitCollabMode();
 }
 
-function edCopyShareLink(btn) {
-  navigator.clipboard.writeText(location.href).then(() => {
-    if (btn) { btn.textContent = 'copied!'; setTimeout(() => btn.textContent = 'share', 1500); }
-    edSetStatus('link copied');
-  });
+const MIDI_SAVE_BASE = '/toys/save';
+
+async function edCopyShareLink(btn) {
+  const name = prompt('name this song:', 'untitled');
+  if (name === null) return; // cancelled
+  if (btn) { btn.textContent = 'saving…'; btn.disabled = true; }
+  try {
+    const state = edPackState();
+    const res   = await fetch(MIDI_SAVE_BASE + '/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ state, name: name.trim() || 'untitled' }),
+    });
+    if (!res.ok) throw new Error('server error');
+    const { id } = await res.json();
+    edLoadedFromId = true; // keep suppressing auto-save for this new ID too
+    const url = new URL(location.href);
+    url.search = '?id=' + id;
+    url.hash   = '#editor';
+    history.replaceState(null, '', url.toString());
+    await navigator.clipboard.writeText(url.toString());
+    edSetStatus('link copied — ' + (name.trim() || 'untitled'));
+  } catch (e) {
+    edSetStatus('share failed');
+  } finally {
+    if (btn) { btn.textContent = 'share'; btn.disabled = false; }
+  }
 }
 
 function edCopyLink() {
@@ -865,8 +887,11 @@ function edUnpackState(encoded) {
   return null;
 }
 
-let _edSaveTimer = null;
+let _edSaveTimer   = null;
+let edLoadedFromId = false; // suppress URL auto-save when loaded from a share ID
+
 function edSaveToURL() {
+  if (edLoadedFromId) return; // keep URL clean — user must explicitly share to get a new ID
   clearTimeout(_edSaveTimer);
   _edSaveTimer = setTimeout(() => {
     const url = new URL(location.href);
@@ -875,33 +900,34 @@ function edSaveToURL() {
   }, 400);
 }
 
+function _edApplyState(state) {
+  document.getElementById('ed-bpm').value = state.bpm;
+  edBarCount = state.bars || 4;
+  document.getElementById('ed-bars-display').textContent = edBarCount;
+  document.getElementById('ed-stepsize').value = state.spb;
+  state.tracks.forEach((t, i) => {
+    if (!ED_TRACKS[i]) return;
+    ED_TRACKS[i].sf      = t.sf;
+    ED_TRACKS[i].bank    = t.bank;
+    ED_TRACKS[i].program = t.program;
+  });
+  const sfGlobal = document.getElementById('ed-sf-global');
+  if (sfGlobal) sfGlobal.value = state.sf;
+  buildTrackUI();
+  edNotes = state.notes;
+  edBuilt = 0;
+  buildEdGrid(edGetSteps());
+  edRefreshGrid();
+  edUpdateFooter();
+}
+
 function edRestoreFromURL() {
   const encoded = new URLSearchParams(location.search).get('s');
   if (!encoded) return false;
   try {
     const state = edUnpackState(encoded);
     if (!state) return false;
-
-    document.getElementById('ed-bpm').value = state.bpm;
-    edBarCount = state.bars || 4;
-    document.getElementById('ed-bars-display').textContent = edBarCount;
-    document.getElementById('ed-stepsize').value = state.spb;
-
-    state.tracks.forEach((t, i) => {
-      if (!ED_TRACKS[i]) return;
-      ED_TRACKS[i].sf      = t.sf;
-      ED_TRACKS[i].bank    = t.bank;
-      ED_TRACKS[i].program = t.program;
-    });
-    const sfGlobal = document.getElementById('ed-sf-global');
-    if (sfGlobal) sfGlobal.value = state.sf;
-    buildTrackUI();
-
-    edNotes = state.notes;
-    edBuilt = 0;
-    buildEdGrid(edGetSteps());
-    edRefreshGrid();
-    edUpdateFooter();
+    _edApplyState(state);
     return true;
   } catch (e) {
     console.warn('edRestoreFromURL failed:', e);
@@ -920,7 +946,28 @@ function initFromURL() {
       ws.send(JSON.stringify({ type: 'collab_room_info', code }));
     });
   }
-  edRestoreFromURL();
+
+  const shareId = params.get('id');
+  if (shareId) {
+    edLoadedFromId = true;
+    fetch(MIDI_SAVE_BASE + '/load/' + shareId)
+      .then(r => { if (!r.ok) throw new Error('not found'); return r.json(); })
+      .then(({ state, name }) => {
+        const parsed = edUnpackState(state);
+        if (parsed) {
+          // reuse the existing apply logic via a fake URL restore
+          _edApplyState(parsed);
+          edSetStatus('loaded: ' + name);
+        }
+      })
+      .catch(() => {
+        edLoadedFromId = false;
+        edSetStatus('share link expired or invalid');
+        edRestoreFromURL(); // fall back to ?s= if present
+      });
+  } else {
+    edRestoreFromURL();
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
