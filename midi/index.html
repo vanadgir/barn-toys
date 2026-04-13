@@ -4266,12 +4266,12 @@ function radioDrawIdle() {
   ctx.fillStyle = '#080c10';
   ctx.fillRect(0, 0, W, H);
 
-  // splash — big and centered
+  // splash — same as playing state
   if (radioSplash && radioSplash.complete) {
     const aspect = radioSplash.width / radioSplash.height;
-    const dh = H * 0.85, dw = dh * aspect;
-    ctx.globalAlpha = 0.12;
-    ctx.drawImage(radioSplash, (W - dw) / 2, (H - dh) / 2, dw, dh);
+    const dh = H, dw = dh * aspect;
+    ctx.globalAlpha = 0.08;
+    ctx.drawImage(radioSplash, (W - dw) / 2, 0, dw, dh);
     ctx.globalAlpha = 1;
   }
 
