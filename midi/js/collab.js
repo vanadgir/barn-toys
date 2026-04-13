@@ -716,8 +716,9 @@ function edCopyShareLink(btn) {
   const popup = document.getElementById('share-popup');
   const input = document.getElementById('share-name-input');
   popup.style.display = 'flex';
-  input.value = '';
+  input.value = document.getElementById('ed-project-name')?.value.trim() || '';
   input.focus();
+  input.select();
 }
 
 function shareDismiss() {
@@ -744,6 +745,8 @@ async function shareConfirm() {
     url.hash   = '#editor';
     history.replaceState(null, '', url.toString());
     await navigator.clipboard.writeText(url.toString());
+    const nameEl = document.getElementById('ed-project-name');
+    if (nameEl) nameEl.value = name;
     edSetStatus('link copied — ' + name);
     shareDismiss();
   } catch (e) {
