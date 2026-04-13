@@ -709,31 +709,47 @@ function edLeaveCollab() {
 }
 
 const MIDI_SAVE_BASE = '/toys/save';
+let _shareBtn = null;
 
-async function edCopyShareLink(btn) {
-  const name = prompt('name this song:', 'untitled');
-  if (name === null) return; // cancelled
-  if (btn) { btn.textContent = 'saving…'; btn.disabled = true; }
+function edCopyShareLink(btn) {
+  _shareBtn = btn;
+  const popup = document.getElementById('share-popup');
+  const input = document.getElementById('share-name-input');
+  popup.style.display = 'flex';
+  input.value = '';
+  input.focus();
+}
+
+function shareDismiss() {
+  document.getElementById('share-popup').style.display = 'none';
+}
+
+async function shareConfirm() {
+  const input = document.getElementById('share-name-input');
+  const name  = input.value.trim() || 'untitled';
+  const btn   = document.getElementById('share-confirm-btn');
+  btn.textContent = 'saving…'; btn.disabled = true;
   try {
     const state = edPackState();
     const res   = await fetch(MIDI_SAVE_BASE + '/save', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ state, name: name.trim() || 'untitled' }),
+      body: JSON.stringify({ state, name }),
     });
     if (!res.ok) throw new Error('server error');
     const { id } = await res.json();
-    edLoadedFromId = true; // keep suppressing auto-save for this new ID too
+    edLoadedFromId = true;
     const url = new URL(location.href);
     url.search = '?id=' + id;
     url.hash   = '#editor';
     history.replaceState(null, '', url.toString());
     await navigator.clipboard.writeText(url.toString());
-    edSetStatus('link copied — ' + (name.trim() || 'untitled'));
+    edSetStatus('link copied — ' + name);
+    shareDismiss();
   } catch (e) {
     edSetStatus('share failed');
   } finally {
-    if (btn) { btn.textContent = 'share'; btn.disabled = false; }
+    btn.textContent = 'share'; btn.disabled = false;
   }
 }
 
