@@ -483,10 +483,71 @@
       text-align: right;
     }
 
+    .radio-body {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+    }
+
+    .radio-sidebar {
+      width: 200px;
+      flex-shrink: 0;
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      background: var(--bg2);
+      display: flex;
+      flex-direction: column;
+    }
+    .radio-sidebar::-webkit-scrollbar { width: 3px; }
+    .radio-sidebar::-webkit-scrollbar-thumb { background: var(--border); }
+
+    .radio-channel { border-bottom: 1px solid var(--border); }
+    .radio-channel-hdr {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      font-size: 0.6rem;
+      letter-spacing: 0.1em;
+      color: var(--accent);
+      text-transform: uppercase;
+      cursor: pointer;
+      user-select: none;
+    }
+    .radio-channel-hdr:hover { background: rgba(200,168,75,0.06); }
+    .radio-channel-hdr .ch-arrow { font-size: 0.5rem; color: var(--muted); margin-left: auto; }
+    .radio-track-list { display: flex; flex-direction: column; }
+    .radio-channel.collapsed .radio-track-list { display: none; }
+
+    .radio-track-item {
+      padding: 6px 10px 6px 18px;
+      font-size: 0.58rem;
+      color: var(--muted);
+      cursor: pointer;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      border-left: 2px solid transparent;
+      transition: color 0.1s, background 0.1s;
+    }
+    .radio-track-item:hover { color: var(--text); background: rgba(255,255,255,0.03); }
+    .radio-track-item.active {
+      color: var(--accent);
+      border-left-color: var(--accent);
+      background: rgba(200,168,75,0.06);
+    }
+    .radio-track-dur {
+      float: right;
+      font-size: 0.5rem;
+      color: var(--border);
+      margin-left: 4px;
+    }
+    .radio-track-item.active .radio-track-dur { color: var(--muted); }
+
     #radio-canvas {
       flex: 1;
       display: block;
-      width: 100%;
+      min-width: 0;
     }
 
     .radio-loading {
@@ -969,7 +1030,6 @@
 
 <div class="tab-bar">
   <button class="tab-btn active" id="tab-editor-btn" onclick="switchTab('editor')">editor</button>
-  <button class="tab-btn" id="tab-live-btn" onclick="switchTab('live')">live</button>
   <button class="tab-btn" id="tab-radio-btn" onclick="switchTab('radio')">radio</button>
 </div>
 
@@ -1221,8 +1281,12 @@
       </div>
       <button class="radio-btn" onclick="radioNext()">next →</button>
     </div>
-    <div class="radio-loading" id="radio-loading">loading tracks…</div>
-    <canvas id="radio-canvas" style="display:none"></canvas>
+    <div class="radio-body">
+      <div class="radio-sidebar" id="radio-sidebar">
+        <div class="radio-loading" id="radio-loading" style="padding:20px;text-align:center">loading…</div>
+      </div>
+      <canvas id="radio-canvas"></canvas>
+    </div>
   </div>
 </div>
 
@@ -1538,14 +1602,11 @@ let activeTab = 'editor';
 
 function switchTab(tab) {
   activeTab = tab;
-  document.getElementById('tab-live-btn').classList.toggle('active', tab === 'live');
   document.getElementById('tab-editor-btn').classList.toggle('active', tab === 'editor');
   document.getElementById('tab-radio-btn').classList.toggle('active', tab === 'radio');
-  document.getElementById('panel-live').classList.toggle('active', tab === 'live');
+  document.getElementById('panel-live').classList.toggle('active', false);
   document.getElementById('panel-editor').classList.toggle('active', tab === 'editor');
   document.getElementById('panel-radio').classList.toggle('active', tab === 'radio');
-  if (tab === 'editor' && !isMuted) toggleMute();
-  if (tab === 'live'   &&  isMuted) toggleMute();
   if (tab === 'radio') radioInit();
 }
 
@@ -3728,7 +3789,7 @@ async function radioInit() {
       t._maxP = Math.min(127, Math.max(...ps) + 2);
     });
     document.getElementById('radio-loading').style.display = 'none';
-    document.getElementById('radio-canvas').style.display = 'block';
+    radioRenderSidebar();
     radioShuffle();
     radioPlayTrack();
   } catch(e) {
@@ -3736,6 +3797,74 @@ async function radioInit() {
     radioInited = false;
   }
 }
+
+function radioRenderSidebar() {
+  const sidebar = document.getElementById('radio-sidebar');
+  sidebar.innerHTML = '';
+
+  // group by channel
+  const channels = new Map();
+  radioTracks.forEach((t, idx) => {
+    const ch = t.channel || 'uncategorized';
+    if (!channels.has(ch)) channels.set(ch, []);
+    channels.get(ch).push({ track: t, idx });
+  });
+
+  channels.forEach((items, chName) => {
+    const chEl = document.createElement('div');
+    chEl.className = 'radio-channel';
+    chEl.innerHTML = `
+      <div class="radio-channel-hdr" onclick="this.parentElement.classList.toggle('collapsed')">
+        <span>${chName}</span>
+        <span class="ch-arrow">▾</span>
+      </div>
+      <div class="radio-track-list" id="radio-ch-${chName}"></div>`;
+    sidebar.appendChild(chEl);
+
+    const list = chEl.querySelector('.radio-track-list');
+    items.forEach(({ track, idx }) => {
+      const item = document.createElement('div');
+      item.className = 'radio-track-item';
+      item.id = `radio-track-item-${idx}`;
+      const dur = track.duration ? (() => {
+        const m = Math.floor(track.duration / 60);
+        const s = Math.floor(track.duration % 60).toString().padStart(2,'0');
+        return `${m}:${s}`;
+      })() : '';
+      item.innerHTML = `<span class="radio-track-dur">${dur}</span>${track.title}`;
+      item.addEventListener('click', () => radioPlayByIdx(idx));
+      list.appendChild(item);
+    });
+  });
+}
+
+function radioUpdateSidebarActive() {
+  document.querySelectorAll('.radio-track-item').forEach(el => el.classList.remove('active'));
+  if (radioTrack) {
+    const idx = radioTracks.indexOf(radioTrack);
+    const el  = document.getElementById(`radio-track-item-${idx}`);
+    if (el) { el.classList.add('active'); el.scrollIntoView({ block: 'nearest' }); }
+  }
+}
+
+function radioPlayByIdx(trackIdx) {
+  // find or insert into queue at front
+  radioQueueIdx = 0;
+  radioQueue = [trackIdx, ...radioQueue.filter(i => i !== trackIdx)];
+  radioPlayTrack();
+}
+
+// page visibility pause — stop audio when tab hidden, resume when visible
+document.addEventListener('visibilitychange', () => {
+  if (!radioAudio) return;
+  if (document.hidden) {
+    radioAudio.pause();
+    if (radioAnimFrame) { cancelAnimationFrame(radioAnimFrame); radioAnimFrame = null; }
+  } else {
+    radioAudio.play().catch(() => {});
+    if (!radioAnimFrame) radioAnimFrame = requestAnimationFrame(radioDraw);
+  }
+});
 
 function radioShuffle() {
   const arr = radioTracks.map((_, i) => i);
@@ -3765,14 +3894,15 @@ function radioPlayTrack() {
   document.getElementById('radio-meta').textContent = `${Math.round(track.bpm)} bpm · ${track.notes.length} notes`;
   document.getElementById('radio-progress-fill').style.width = '0%';
   document.getElementById('radio-time').textContent = '0:00 / 0:00';
+  radioUpdateSidebarActive();
 
   const audio = new Audio(RADIO_BASE + track.ogg.replace(/ /g, '%20'));
   audio.volume = 0.8;
   radioAudio = audio;
-  audio.play().catch(() => {});
+  if (!document.hidden) audio.play().catch(() => {});
   audio.addEventListener('ended', () => radioNext());
 
-  radioAnimFrame = requestAnimationFrame(radioDraw);
+  if (!document.hidden) radioAnimFrame = requestAnimationFrame(radioDraw);
 }
 
 function radioComputeLayout(W, H, track) {
