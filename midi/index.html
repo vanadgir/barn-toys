@@ -175,6 +175,7 @@
     .key.white { background: var(--wkey); color: #2a3a4a; }
     .key.black { background: var(--bkey); color: #1a2530; }
     .key.c     { border-top: 1px solid rgba(75,139,200,0.25); color: #2a3f55; }
+    .key.drum-key { background: #1e2d3a; color: #7aadcc; font-size: 8px; letter-spacing: 0; }
     .key:hover { filter: brightness(1.5); }
 
     /* ── scroll + grid ── */
@@ -1079,6 +1080,35 @@ const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 const isBlack    = midi => [1,3,6,8,10].includes(midi % 12);
 const noteName   = midi => NOTE_NAMES[midi % 12] + (Math.floor(midi / 12) - 1);
 
+// GM drum map labels for channel 9 notes (abbreviated + full)
+const GM_DRUM = {
+  35: ['BD2',  'Bass Drum 2'],    36: ['BD',   'Bass Drum'],
+  37: ['Rim',  'Side Stick'],     38: ['SN',   'Snare'],
+  39: ['Clap', 'Hand Clap'],      40: ['ESN',  'Elec Snare'],
+  41: ['LFT',  'Low Floor Tom'],  42: ['CHH',  'Closed HiHat'],
+  43: ['HFT',  'Hi Floor Tom'],   44: ['PHH',  'Pedal HiHat'],
+  45: ['LT',   'Low Tom'],        46: ['OHH',  'Open HiHat'],
+  47: ['LMT',  'Lo-Mid Tom'],     48: ['HMT',  'Hi-Mid Tom'],
+  49: ['CRS',  'Crash 1'],        50: ['HT',   'High Tom'],
+  51: ['RDE',  'Ride 1'],         52: ['CHN',  'Chinese Cym'],
+  53: ['RBL',  'Ride Bell'],      54: ['TBR',  'Tambourine'],
+  55: ['SPL',  'Splash'],         56: ['CBL',  'Cowbell'],
+  57: ['CRS2', 'Crash 2'],        58: ['VSP',  'Vibraslap'],
+  59: ['RD2',  'Ride 2'],         60: ['HBG',  'Hi Bongo'],
+  61: ['LBG',  'Lo Bongo'],       62: ['MCG',  'Mute Conga'],
+  63: ['HCG',  'Hi Conga'],       64: ['LCG',  'Lo Conga'],
+  65: ['HTB',  'Hi Timbale'],     66: ['LTB',  'Lo Timbale'],
+  67: ['HAG',  'Hi Agogo'],       68: ['LAG',  'Lo Agogo'],
+  69: ['CBS',  'Cabasa'],         70: ['MRC',  'Maracas'],
+  71: ['SWH',  'Short Whistle'],  72: ['LWH',  'Long Whistle'],
+  73: ['SGR',  'Short Guiro'],    74: ['LGR',  'Long Guiro'],
+  75: ['CLV',  'Claves'],         76: ['HWB',  'Hi WoodBlock'],
+  77: ['LWB',  'Lo WoodBlock'],   78: ['MCU',  'Mute Cuica'],
+  79: ['OCU',  'Open Cuica'],     80: ['MTR',  'Mute Triangle'],
+  81: ['OTR',  'Open Triangle'],  82: ['SHK',  'Shaker'],
+  83: ['JBL',  'Jingle Bell'],
+};
+
 const LAYER_COLORS = ['#c8a84b','#4b8bc8','#5ca87a','#c8604b','#a04bc8','#c8b04b'];
 
 const INST_DATA = {
@@ -1170,13 +1200,21 @@ function resolveInstrumentName(sf, program, bank = 0) {
  * @param {HTMLElement}   el       - container element
  * @param {Function|null} onClick  - (midi) => void, or null for display-only
  */
-function buildPianoKeys(el, onClick) {
+function buildPianoKeys(el, onClick, labelFn) {
+  // labelFn(midi) → {text, title} — overrides default note name display
   el.innerHTML = '';
   NOTES.forEach(midi => {
     const key = document.createElement('div');
-    key.className = `key ${isBlack(midi) ? 'black' : 'white'}${midi % 12 === 0 ? ' c' : ''}`;
-    key.textContent = midi % 12 === 0 ? noteName(midi) : '';
-    key.title = noteName(midi);
+    if (labelFn) {
+      const lbl = labelFn(midi);
+      key.className = 'key white drum-key';
+      key.textContent = lbl.text;
+      key.title = lbl.title;
+    } else {
+      key.className = `key ${isBlack(midi) ? 'black' : 'white'}${midi % 12 === 0 ? ' c' : ''}`;
+      key.textContent = midi % 12 === 0 ? noteName(midi) : '';
+      key.title = noteName(midi);
+    }
     key.dataset.midi = midi;
     if (onClick) key.addEventListener('click', () => onClick(midi));
     el.appendChild(key);
@@ -2617,6 +2655,27 @@ const CB_ROLES      = ['lead', 'bass', 'drums'];
 const CB_ROLE_ICONS = { lead: '♪', bass: '♩', drums: '♦' };
 const CB_ROLE_COLORS = { lead: '#c8a84b', bass: '#4b8bc8', drums: '#5ca87a' };
 
+// ── sample cache — one AudioBuffer covers all notes, manifest maps midi→start_s ──
+let cbSampleBuffer   = null;
+let cbSampleManifest = {};
+let cbSampleSlotDur  = 0.45;
+let cbSampleKey      = null;  // "${sf}:${bank}:${program}" — invalidate on change
+
+function cbPrefetchSamples() {
+  if (!wsReady || !cbMyRole) return;
+  const inst = cbRoleInstruments[cbMyRole] || { bank: 0, program: 0 };
+  const key  = `${cbSf}:${inst.bank}:${inst.program}`;
+  if (key === cbSampleKey) return; // already cached
+  cbSampleBuffer  = null;
+  cbSampleManifest = {};
+  cbSampleKey     = null;
+  ws.send(JSON.stringify({
+    type: 'preview_samples',
+    bank: inst.bank, program: inst.program, sf: cbSf,
+    note_bot: NOTE_BOT, note_top: NOTE_TOP,
+  }));
+}
+
 function cbSelectRole(role) {
   // if this role shows a known occupant, don't allow selecting it
   const btn = document.getElementById(`cb-role-btn-${role}`);
@@ -2653,26 +2712,38 @@ function cbGetSpb() {
 }
 
 function cbPreviewNote(midi) {
-  // client-side only — no server roundtrip
   const ctx  = getEdCtx();
   const dest = edGainNode || ctx.destination;
+
+  // use cached sample if ready
+  if (cbSampleBuffer && cbSampleManifest[midi] != null) {
+    const offset = cbSampleManifest[midi];
+    const playDur = cbSampleSlotDur * 0.9;
+    const src  = ctx.createBufferSource();
+    src.buffer = cbSampleBuffer;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.85, ctx.currentTime);
+    gain.gain.setValueAtTime(0.85, ctx.currentTime + playDur * 0.6);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + playDur);
+    src.connect(gain); gain.connect(dest);
+    src.start(ctx.currentTime, offset, playDur);
+    return;
+  }
+
+  // fallback while samples are loading: noise for drums, oscillator for pitched
   if (cbMyRole === 'drums') {
-    // white noise burst, filtered by GM drum map ranges
-    // 35-36=kick(lowpass), 37-45=snare/toms(bandpass), 46+=hihat/cymbal(highpass)
-    const isKick = midi <= 36;
-    const isHat  = midi >= 46;
-    const dur    = isKick ? 0.18 : 0.10;
-    const bufSz  = Math.ceil(ctx.sampleRate * dur);
-    const buf    = ctx.createBuffer(1, bufSz, ctx.sampleRate);
-    const data   = buf.getChannelData(0);
+    const isKick = midi <= 36, isHat = midi >= 46;
+    const dur = isKick ? 0.18 : 0.10;
+    const bufSz = Math.ceil(ctx.sampleRate * dur);
+    const buf = ctx.createBuffer(1, bufSz, ctx.sampleRate);
+    const data = buf.getChannelData(0);
     for (let i = 0; i < bufSz; i++) data[i] = Math.random() * 2 - 1;
-    const src    = ctx.createBufferSource();
-    src.buffer   = buf;
-    const filt   = ctx.createBiquadFilter();
-    if      (isKick) { filt.type = 'lowpass';   filt.frequency.value = 180; }
-    else if (!isHat) { filt.type = 'bandpass';  filt.frequency.value = 900; filt.Q.value = 1.5; }
-    else             { filt.type = 'highpass';  filt.frequency.value = 4000; }
-    const gain   = ctx.createGain();
+    const src = ctx.createBufferSource(); src.buffer = buf;
+    const filt = ctx.createBiquadFilter();
+    if      (isKick) { filt.type = 'lowpass';  filt.frequency.value = 180; }
+    else if (!isHat) { filt.type = 'bandpass'; filt.frequency.value = 900; filt.Q.value = 1.5; }
+    else             { filt.type = 'highpass'; filt.frequency.value = 4000; }
+    const gain = ctx.createGain();
     gain.gain.setValueAtTime(0.5, ctx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
     src.connect(filt); filt.connect(gain); gain.connect(dest);
@@ -2681,8 +2752,7 @@ function cbPreviewNote(midi) {
     const freq = 440 * Math.pow(2, (midi - 69) / 12);
     const osc  = ctx.createOscillator();
     const gain = ctx.createGain();
-    osc.type = 'triangle';
-    osc.frequency.value = freq;
+    osc.type = 'triangle'; osc.frequency.value = freq;
     gain.gain.setValueAtTime(0.25, ctx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
     osc.connect(gain); gain.connect(dest);
@@ -2693,9 +2763,12 @@ function cbPreviewNote(midi) {
 function buildCbKeys() {
   const el = document.getElementById('ed-keys');
   if (!el) return;
-  // always rebuild — editor may have left click handlers on keys
   while (el.firstChild) el.removeChild(el.firstChild);
-  buildPianoKeys(el, cbPreviewNote);
+  const isDrums = cbMyRole === 'drums';
+  const labelFn = isDrums
+    ? midi => ({ text: GM_DRUM[midi]?.[0] ?? '?', title: GM_DRUM[midi]?.[1] ?? `Note ${midi}` })
+    : null;
+  buildPianoKeys(el, cbPreviewNote, labelFn);
 }
 
 function buildCbGrid(steps) {
@@ -3007,6 +3080,7 @@ function cbInstSfChange() {
   cbSf = document.getElementById('cb-inst-sf').value;
   cbBuildInstPicker(); // repopulate programs for new sf
   cbSendInstChange();
+  cbPrefetchSamples();
 }
 
 function cbInstProgChange() {
@@ -3015,6 +3089,7 @@ function cbInstProgChange() {
   const bank = cbMyRole === 'drums' ? 128 : (cbRoleInstruments[cbMyRole]?.bank ?? 0);
   cbRoleInstruments[cbMyRole] = { bank, program: prog };
   cbSendInstChange();
+  cbPrefetchSamples();
 }
 
 function cbSendInstChange() {
@@ -3028,6 +3103,18 @@ function cbSendInstChange() {
 
 // handle collab WS messages (called from ws.onmessage)
 async function cbHandleMessage(msg) {
+  if (msg.type === 'preview_samples') {
+    const inst = cbMyRole ? cbRoleInstruments[cbMyRole] : { bank: 0, program: 0 };
+    const key  = `${msg.sf}:${msg.bank}:${msg.program}`;
+    try {
+      const decoded = await getEdCtx().decodeAudioData(b64ToArrayBuffer(msg.audio));
+      cbSampleBuffer   = decoded;
+      cbSampleManifest = msg.manifest;
+      cbSampleSlotDur  = msg.slot_dur;
+      cbSampleKey      = key;
+    } catch (e) { console.warn('sample decode failed', e); }
+    return;
+  }
   if (msg.type === 'collab_room_info') {
     cbResetRoleBtns(msg.roles);
     joinResetRoleBtns(msg.roles);  // also update join overlay
@@ -3060,6 +3147,7 @@ async function cbHandleMessage(msg) {
     cbRefreshGrid();
     cbBuildInstPicker();
     document.getElementById('ed-note-count').textContent = cbNotes.length;
+    cbPrefetchSamples();  // kick off sample load for this instrument
     return;
   }
   if (msg.type === 'collab_error') {
@@ -3206,11 +3294,14 @@ function edLeaveCollab() {
   if (!cbInRoom) { edExitCollabMode(); return; }
   if (wsReady) ws.send(JSON.stringify({ type: 'collab_leave' }));
   cbClearAllCursors();
-  cbInRoom    = false;
-  cbRoomCode  = null;
-  cbNotes     = [];
+  cbInRoom        = false;
+  cbRoomCode      = null;
+  cbNotes         = [];
   cbCellMap.clear();
-  cbBuilt     = 0;
+  cbBuilt         = 0;
+  cbSampleBuffer  = null;
+  cbSampleManifest = {};
+  cbSampleKey     = null;
   cbStopPlayback();
   // clear URL param
   const url = new URL(location.href);
