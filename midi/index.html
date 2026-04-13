@@ -270,12 +270,15 @@
 </div>
 
 <!-- share popup -->
-<div id="share-popup" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:60;background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:18px 20px;display:none;flex-direction:column;gap:10px;min-width:240px;box-shadow:0 4px 24px rgba(0,0,0,0.5)">
-  <div style="font-size:0.55rem;color:var(--muted);letter-spacing:0.14em;text-transform:uppercase">share song</div>
-  <input id="share-name-input" class="ed-input" placeholder="song name" maxlength="80" style="width:100%;cursor:text" onkeydown="if(event.key==='Enter')shareConfirm();if(event.key==='Escape')shareDismiss()">
-  <div style="display:flex;gap:8px">
-    <button class="ed-btn primary" id="share-confirm-btn" onclick="shareConfirm()" style="flex:1">share</button>
-    <button class="ed-btn" onclick="shareDismiss()">cancel</button>
+<div id="share-popup" style="display:none;position:fixed;z-index:60;background:var(--bg2);border:1px solid var(--border);border-radius:6px;overflow:hidden;min-width:240px;box-shadow:0 4px 24px rgba(0,0,0,0.5);flex-direction:column">
+  <div id="share-popup-drag" style="padding:8px 12px 6px;font-size:0.55rem;color:var(--muted);letter-spacing:0.14em;text-transform:uppercase;cursor:grab;user-select:none;border-bottom:1px solid var(--border)">share song</div>
+  <div style="padding:12px 14px;display:flex;flex-direction:column;gap:10px">
+    <input id="share-name-input" class="ed-input" placeholder="song name" maxlength="80" style="width:100%;cursor:text" onkeydown="if(event.key==='Enter')shareConfirm('new');if(event.key==='Escape')shareDismiss()">
+    <div style="display:flex;gap:6px" id="share-btns">
+      <button class="ed-btn primary" id="share-new-btn" onclick="shareConfirm('new')" style="flex:1">share new</button>
+      <button class="ed-btn" id="share-overwrite-btn" onclick="shareConfirm('overwrite')" style="flex:1;display:none">overwrite</button>
+      <button class="ed-btn" onclick="shareDismiss()">cancel</button>
+    </div>
   </div>
 </div>
 

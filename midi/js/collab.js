@@ -709,34 +709,77 @@ function edLeaveCollab() {
 }
 
 const MIDI_SAVE_BASE = '/toys/save';
-let _shareBtn = null;
 
 function edCopyShareLink(btn) {
-  _shareBtn = btn;
   const popup = document.getElementById('share-popup');
   const input = document.getElementById('share-name-input');
+
+  // show/hide overwrite button based on whether we have an existing ID
+  const currentId = new URLSearchParams(location.search).get('id');
+  document.getElementById('share-overwrite-btn').style.display = currentId ? '' : 'none';
+  const newBtn = document.getElementById('share-new-btn');
+  newBtn.textContent = currentId ? 'share new' : 'share';
+
+  // position near the button
+  if (btn) {
+    const r = btn.getBoundingClientRect();
+    popup.style.top  = (r.bottom + 8) + 'px';
+    popup.style.left = Math.max(8, r.left - 60) + 'px';
+    popup.style.transform = '';
+  }
+
   popup.style.display = 'flex';
   input.value = document.getElementById('ed-project-name')?.value.trim() || '';
   input.focus();
   input.select();
+
+  // draggable
+  const drag = document.getElementById('share-popup-drag');
+  let ox = 0, oy = 0, dragging = false;
+  drag.onmousedown = e => {
+    dragging = true;
+    ox = e.clientX - popup.getBoundingClientRect().left;
+    oy = e.clientY - popup.getBoundingClientRect().top;
+    drag.style.cursor = 'grabbing';
+    e.preventDefault();
+  };
+  document.onmousemove = e => {
+    if (!dragging) return;
+    popup.style.left = (e.clientX - ox) + 'px';
+    popup.style.top  = (e.clientY - oy) + 'px';
+  };
+  document.onmouseup = () => { dragging = false; drag.style.cursor = 'grab'; };
 }
 
 function shareDismiss() {
   document.getElementById('share-popup').style.display = 'none';
+  document.onmousemove = null;
+  document.onmouseup  = null;
 }
 
-async function shareConfirm() {
-  const input = document.getElementById('share-name-input');
-  const name  = input.value.trim() || 'untitled';
-  const btn   = document.getElementById('share-confirm-btn');
-  btn.textContent = 'saving…'; btn.disabled = true;
+async function shareConfirm(mode) {
+  const input  = document.getElementById('share-name-input');
+  const name   = input.value.trim() || 'untitled';
+  const newBtn = document.getElementById('share-new-btn');
+  const owBtn  = document.getElementById('share-overwrite-btn');
+  [newBtn, owBtn].forEach(b => { if (b) b.disabled = true; });
+
+  const currentId = new URLSearchParams(location.search).get('id');
+  const overwrite = mode === 'overwrite' && currentId;
+
   try {
     const state = edPackState();
-    const res   = await fetch(MIDI_SAVE_BASE + '/save', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ state, name }),
-    });
+    const res = overwrite
+      ? await fetch(MIDI_SAVE_BASE + '/update/' + currentId, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ state, name }),
+        })
+      : await fetch(MIDI_SAVE_BASE + '/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ state, name }),
+        });
     if (!res.ok) throw new Error('server error');
     const { id } = await res.json();
     edLoadedFromId = true;
@@ -747,12 +790,13 @@ async function shareConfirm() {
     await navigator.clipboard.writeText(url.toString());
     const nameEl = document.getElementById('ed-project-name');
     if (nameEl) nameEl.value = name;
-    edSetStatus('link copied — ' + name);
+    edSetStatus((overwrite ? 'updated: ' : 'link copied — ') + name);
     shareDismiss();
   } catch (e) {
     edSetStatus('share failed');
   } finally {
-    btn.textContent = 'share'; btn.disabled = false;
+    [newBtn, owBtn].forEach(b => { if (b) b.disabled = false; });
+    if (newBtn) newBtn.textContent = currentId ? 'share new' : 'share';
   }
 }
 
