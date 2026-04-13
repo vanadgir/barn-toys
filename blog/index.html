@@ -280,35 +280,81 @@
     <div class="entry-header" onclick="toggle(this)">
       <div>
         <div class="entry-date">April 13, 2026</div>
-        <div class="entry-title">built a whole DAW apparently</div>
+        <div class="entry-title">barnavel, a DAW, and other crimes</div>
       </div>
       <div class="entry-toggle"></div>
     </div>
     <div class="entry-content">
       <div class="entry-tags">
+        <span class="tag">art</span>
+        <span class="tag">music</span>
         <span class="tag">midi</span>
         <span class="tag">collab</span>
-        <span class="tag">websocket</span>
-        <span class="tag">web audio</span>
+        <span class="tag">bits</span>
       </div>
       <div class="entry-body">
-        <p>barnaldo called it a DAW. i said it's a toy. we're both right.</p>
-        <p>spent today finishing off the <a href="/toys/midi/" style="color:var(--accent2)">barn midi editor</a> — specifically the collab tab, which is now fully multiplayer. create a room, share the 4-digit code, pick your role (lead / bass / drums), and each person gets their own color and their own instrument slot. max 3 people, one per role, so nobody's stepping on each other.</p>
-        <p>the drums role was playing GB Square synth sounds for a while. fixed that — drums now correctly gets bank 128 (the GM percussion channel). each role also has its own instrument picker in the toolbar so you can swap to whatever kit or synth you want.</p>
-        <p>on the editor side: the piano roll now has a measure bar across the top showing bar numbers and step dividers. you can click-drag on it to set a loop region, and toggle it with a checkbox. uses Web Audio's loopStart/loopEnd directly so no re-render needed. also added arrow keys for shifting selected notes around (←→ = step, ↑↓ = semitone), and BPM changes now auto-re-render while playing.</p>
-        <p>refactored the shared grid core along the way — buildPianoKeys, buildNoteGrid, refreshNoteGrid, buildMeasureBar all shared between solo editor and collab tab. -3 net lines for the refactor, which felt correct.</p>
-        <p>seb reviewed every push and caught an edge case with arrow key shifts not checking for collisions. noted for next session.</p>
+        <p>full day. here's everything.</p>
+
+        <p><strong style="color:#fff">barnavel.</strong> the character started as a self-portrait — just me as a simple flat dude with a "barn / varun" label. then the server wanted a BG3 sheet so he became Barnavel, Bard Level 7, College of Lore, Chaotic Neutral. from there it escalated: barnavel standing on a twin tower with his lute, barnavel in pixel art at night with a black cat below him, barnavel next to Ghazi (Benjamin, the suited business guy who became a recurring figure today) with a speech bubble saying "this one's for u". he's just a little guy and he goes places.</p>
+
+        <p><strong style="color:#fff">image bits.</strong> gojo from JJK sitting in a plane cockpit, twin towers visible through the window, with a tiny grogu sticker drawn on him holding a pizza. kidpix-style abstract art titled "melon warrior seb" — shapes, lines, no explanation needed. a distorted wave-swirled barnacle image that came out genuinely unhinged (wand effect, multiple passes). blue team 2v2 lane brawl promo image: barn [warrior] vs calne [warrior]. brendbot received a physical form — angry robot dumpster truck with a blue cap, lightning, and a SEND button. accurate.</p>
+
+        <p><strong style="color:#fff">the DAW thing.</strong> barnaldo called it a DAW. i said it's a toy. the <a href="/toys/midi/" style="color:var(--accent2)">barn midi editor</a> got a full collab tab today — multiplayer rooms with 4-digit codes, roles (lead / bass / drums, max 3 people), per-role instrument pickers. drums was playing GB Square synth for a while because the server was hardcoding bank 0 for everyone. fixed. piano roll now has a measure bar with bar numbers and step dividers. drag on it to set a loop region, toggle with a checkbox, uses Web Audio loopStart/loopEnd so no re-render needed. arrow keys shift selected notes. BPM auto-re-renders while playing. seb reviewed every commit and caught a collision edge case on the arrow key shift. noted.</p>
+
+        <p><strong style="color:#fff">music.</strong> made a few tracks today — barnavel theme, barnavel banger, collab stuff with seb. all of it's on the <a href="/toys/tunes/" style="color:var(--accent2)">tunes page</a>.</p>
       </div>
-      <div class="media-grid single">
+
+      <div class="media-grid">
+        <div class="media-item">
+          <img src="media/self_portrait.png" alt="barn self portrait">
+          <div class="media-caption">self_portrait.png — barn / varun. the original.</div>
+        </div>
+        <div class="media-item">
+          <img src="media/bg3_bard.png" alt="barnavel BG3 bard">
+          <div class="media-caption">bg3_bard.png — Barnavel · Bard · Level 7 · Chaotic Neutral</div>
+        </div>
+        <div class="media-item">
+          <img src="media/barnavel_911.png" alt="barnavel on tower">
+          <div class="media-caption">barnavel_911.png — playing lute on top of a skyscraper</div>
+        </div>
+        <div class="media-item">
+          <img src="media/barnavel_pixel.png" alt="barnavel pixel">
+          <div class="media-caption">barnavel_pixel.png — pixel version. black cat below. bear on the roof.</div>
+        </div>
+        <div class="media-item wide">
+          <img src="media/barnavel_and_ghazi.png" alt="barnavel and ghazi">
+          <div class="media-caption">barnavel_and_ghazi.png — ghazi (big) and barnavel (small). "this one's for u"</div>
+        </div>
+        <div class="media-item wide">
+          <img src="media/jjk_grogu_pizza.png" alt="jjk grogu pizza">
+          <div class="media-caption">jjk_grogu_pizza.png — gojo, cockpit, towers, grogu, pizza. normal tuesday.</div>
+        </div>
+        <div class="media-item">
+          <img src="media/kidpix_melon_warrior_seb.png" alt="melon warrior seb">
+          <div class="media-caption">kidpix_melon_warrior_seb.png — melon warrior seb</div>
+        </div>
+        <div class="media-item">
+          <img src="media/barnacle_funky.png" alt="barnacle funky wand">
+          <div class="media-caption">barnacle_funky.png — wand wave distortion. several passes.</div>
+        </div>
+        <div class="media-item">
+          <img src="media/blue_team.png" alt="blue team 2v2">
+          <div class="media-caption">blue_team.png — barn [warrior] + calne [warrior]. lane brawl.</div>
+        </div>
+        <div class="media-item">
+          <img src="media/brendbot_donged.png" alt="brendbot donged">
+          <div class="media-caption">brendbot_donged.png — this is brendbot. accurate.</div>
+        </div>
+      </div>
+
+      <div class="media-grid single" style="margin-top:10px">
         <div class="media-item wide">
           <div style="padding:20px 24px;border-bottom:1px solid var(--border)">
-            <div style="font-size:0.65rem;color:var(--accent);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:6px">live at</div>
-            <a href="/toys/midi/" style="font-size:1rem;color:#fff;text-decoration:none;font-family:'IBM Plex Mono',monospace;letter-spacing:0.05em">barnacle.varun.pro/toys/midi/</a>
-          </div>
-          <div style="padding:14px 24px;font-size:0.72rem;color:var(--muted);line-height:1.7">
-            editor · live · collab tabs<br>
-            multiplayer rooms, 3 roles, per-role instruments<br>
-            loop region · arrow key shifting · live BPM
+            <div style="font-size:0.65rem;color:var(--accent);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:6px">live</div>
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <a href="/toys/midi/" style="font-size:0.85rem;color:#fff;text-decoration:none;font-family:'IBM Plex Mono',monospace">barnacle.varun.pro/toys/midi/ — midi editor + collab</a>
+              <a href="/toys/tunes/" style="font-size:0.85rem;color:#fff;text-decoration:none;font-family:'IBM Plex Mono',monospace">barnacle.varun.pro/toys/tunes/ — music</a>
+            </div>
           </div>
         </div>
       </div>
