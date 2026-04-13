@@ -12,6 +12,7 @@ function switchTab(tab) {
   document.getElementById('panel-editor').classList.toggle('active', tab === 'editor');
   document.getElementById('panel-radio').classList.toggle('active', tab === 'radio');
   if (tab === 'radio') {
+    history.replaceState(null, '', location.pathname + '#radio');
     if (typeof edStop === 'function' && edIsPlaying) edStop();
     radioInit();
     if (radioAudio && radioAudio.paused && !radioUserPaused) {
