@@ -2687,6 +2687,8 @@ let cbSteps         = 32;
 let cbStepBeats     = 0.5;
 let cbAudioSource   = null;
 let cbIsPlaying     = false;
+let cbPlayCtxStart  = 0;    // ctx.currentTime when current playback loop began
+let cbPlayLoopSecs  = 0;    // duration of one loop in seconds (for resume-on-rerender)
 let cbSf            = 'pokemon';
 let cbRoleInstruments = {
   lead:  { bank: 0,   program: 80 },
@@ -2781,15 +2783,16 @@ function buildCbKeys() {
   const el = document.getElementById('ed-keys');
   if (!el) return;
   while (el.firstChild) el.removeChild(el.firstChild);
-  // spacer to match the 16px measure bar at top of ed-roll-inner
-  const spacer = document.createElement('div');
-  spacer.style.cssText = 'height:16px;flex-shrink:0;border-bottom:1px solid rgba(75,139,200,0.2);background:#111120;';
-  el.appendChild(spacer);
   const isDrums = cbMyRole === 'drums';
   const labelFn = isDrums
     ? midi => ({ text: GM_DRUM[midi]?.[0] ?? '?', title: GM_DRUM[midi]?.[1] ?? `Note ${midi}` })
     : null;
   buildPianoKeys(el, cbPreviewNote, labelFn);
+  // spacer to match the 16px measure bar at top of ed-roll-inner
+  // MUST be inserted AFTER buildPianoKeys, which calls el.innerHTML='' and would wipe it
+  const spacer = document.createElement('div');
+  spacer.style.cssText = 'height:16px;flex-shrink:0;border-bottom:1px solid rgba(75,139,200,0.2);background:#111120;';
+  el.insertBefore(spacer, el.firstChild);
 }
 
 function buildCbGrid(steps) {
@@ -2992,13 +2995,21 @@ function cbStop() {
 
 function cbStopPlayback() {
   if (cbAudioSource) { try { cbAudioSource.stop(); } catch(e){} cbAudioSource = null; }
-  cbIsPlaying = false;
+  cbIsPlaying    = false;
+  cbPlayCtxStart = 0;
+  cbPlayLoopSecs = 0;
   const ph = document.getElementById('ed-playhead');
   if (ph) ph.style.display = 'none';
   document.getElementById('ed-status').textContent = '';
 }
 
 async function cbReceiveAudio(audioB64, bpm, steps, stepBeats) {
+  // capture current playback position BEFORE stopping, so re-renders don't snap to 0
+  const ctx0 = getCtx();
+  let resumeOffset = 0;
+  if (cbAudioSource && cbPlayLoopSecs > 0) {
+    resumeOffset = (ctx0.currentTime - cbPlayCtxStart) % cbPlayLoopSecs;
+  }
   cbStopPlayback();
   const ctx = getCtx();
   try {
@@ -3008,23 +3019,26 @@ async function cbReceiveAudio(audioB64, bpm, steps, stepBeats) {
     src.buffer = buf;
     src.loop = cbLooping;
     src.connect(gainNode || ctx.destination);
-    src.start();
-    cbAudioSource = src;
-    cbIsPlaying = true;
+    // resume from where we were (0 on first play, seamless on re-render)
+    const loopSecs  = steps * stepBeats * (60 / bpm);
+    const safeOffset = resumeOffset % loopSecs;
+    src.start(0, safeOffset);
+    cbAudioSource  = src;
+    cbIsPlaying    = true;
+    cbPlayLoopSecs = loopSecs;
+    cbPlayCtxStart = ctx.currentTime - safeOffset;  // virtual start of the loop
     document.getElementById('ed-status').textContent = cbLooping ? 'playing ↺' : 'playing';
     src.onended = () => { if (!cbLooping) cbStopPlayback(); };
     // animate playhead
-    const loopSecs  = steps * stepBeats * (60 / bpm);
-    const totalPx   = steps * 40;
-    const startTime = ctx.currentTime;
-    const ph        = document.getElementById('ed-playhead');
+    const totalPx = steps * 40;
+    const ph      = document.getElementById('ed-playhead');
     if (ph) {
       ph.style.display = 'block';
       function animCb() {
         if (!cbIsPlaying || !cbAudioSource) { ph.style.display = 'none'; return; }
         const elapsed = cbLooping
-          ? (ctx.currentTime - startTime) % loopSecs
-          : Math.min(ctx.currentTime - startTime, loopSecs);
+          ? (ctx.currentTime - cbPlayCtxStart) % loopSecs
+          : Math.min(ctx.currentTime - cbPlayCtxStart, loopSecs);
         ph.style.left = (elapsed / loopSecs * totalPx) + 'px';
         requestAnimationFrame(animCb);
       }
