@@ -1069,6 +1069,34 @@
   </div>
 </div>
 
+<!-- create overlay: shown when user clicks ⇄ collab -->
+<div id="create-overlay" style="display:none;position:fixed;inset:0;background:rgba(8,12,16,0.92);z-index:50;align-items:center;justify-content:center">
+  <div style="display:flex;flex-direction:column;gap:18px;align-items:center;padding:32px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;min-width:320px">
+    <div style="font-size:0.6rem;color:var(--muted);letter-spacing:0.14em;text-transform:uppercase">start collab room</div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <span class="ed-label">name</span>
+      <input id="create-name" class="ed-input" placeholder="your name" style="width:130px;cursor:text" maxlength="20">
+    </div>
+    <div class="cb-roles" id="create-roles">
+      <button class="cb-role-btn selected" id="create-role-btn-lead" onclick="createSelectRole('lead')">
+        <span class="cb-role-icon">♪</span>
+        <span class="cb-role-name">lead</span>
+      </button>
+      <button class="cb-role-btn" id="create-role-btn-bass" onclick="createSelectRole('bass')">
+        <span class="cb-role-icon">♩</span>
+        <span class="cb-role-name">bass</span>
+      </button>
+      <button class="cb-role-btn" id="create-role-btn-drums" onclick="createSelectRole('drums')">
+        <span class="cb-role-icon">♦</span>
+        <span class="cb-role-name">drums</span>
+      </button>
+    </div>
+    <button class="ed-btn primary" onclick="createConfirm()" style="width:100%">create room</button>
+    <button class="ed-btn" onclick="createDismiss()" style="width:100%;margin-top:-8px;color:var(--muted)">cancel</button>
+    <div class="cb-error" id="create-error"></div>
+  </div>
+</div>
+
 <!-- collab import confirm overlay -->
 <div id="cb-import-overlay" style="display:none;position:fixed;inset:0;background:rgba(8,12,16,0.92);z-index:51;align-items:center;justify-content:center">
   <div style="display:flex;flex-direction:column;gap:14px;align-items:center;padding:28px 32px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;min-width:280px;text-align:center">
@@ -3152,23 +3180,23 @@ async function cbHandleMessage(msg) {
     return;
   }
   if (!cbInRoom) return;
+  if (msg.type === 'collab_role_confirm') {
+    // server confirmed our role change — update local identity before roles_update arrives
+    cbMyRole      = msg.your_role;
+    cbMyColorIdx  = msg.your_color_idx;
+    cbBuildInstPicker();
+    cbSampleBuffer = null; cbSampleManifest = {}; cbSampleKey = null;
+    cbPrefetchSamples();
+    buildCbKeys();
+    return;
+  }
   if (msg.type === 'collab_user_joined' || msg.type === 'collab_user_left' || msg.type === 'collab_roles_update') {
     if (msg.type === 'collab_user_left') {
       // clear their cursor
       const gone = cbRoomUsers.find(u => !msg.users.find(v => v.color_idx === u.color_idx));
       if (gone) cbSetCursor(gone.color_idx, null, null, null);
     }
-    if (msg.type === 'collab_roles_update') {
-      // update my role if it changed (only on collab_change_role responses)
-      const me = msg.users.find(u => u.color_idx === cbMyColorIdx);
-      if (me && me.role !== cbMyRole) {
-        cbMyRole = me.role;
-        cbBuildInstPicker(); // refresh picker for new role
-        cbSampleBuffer = null; cbSampleManifest = {}; cbSampleKey = null; // invalidate old cache
-        cbPrefetchSamples(); // load samples for new instrument
-        buildCbKeys();       // rebuild piano keys (drum labels vs note names)
-      }
-    }
+    // collab_role_confirm already updated cbMyRole/cbMyColorIdx before this arrives
     cbUpdateUsers(msg.users);
     return;
   }
@@ -3249,14 +3277,31 @@ let edCollabPending = false;
 
 function edStartCollab() {
   if (cbInRoom) return;
+  // show create overlay so user can pick name + role
+  const ov = document.getElementById('create-overlay');
+  ov.style.display = 'flex';
+  document.getElementById('create-name').focus();
+}
+
+let createSelectedRole = 'lead';
+function createSelectRole(role) {
+  createSelectedRole = role;
+  CB_ROLES.forEach(r => document.getElementById(`create-role-btn-${r}`)?.classList.toggle('selected', r === role));
+}
+function createConfirm() {
+  const name = document.getElementById('create-name').value.trim() || 'anon';
+  document.getElementById('create-error').textContent = '';
+  document.getElementById('create-overlay').style.display = 'none';
   const btn = document.getElementById('ed-collab-btn');
   if (btn) btn.textContent = 'connecting…';
   edCollabPending = true;
+  cbSelectedRole = createSelectedRole;
   ensureWS(() => {
-    if (!cbSelectedRole) cbSelectedRole = 'lead';
-    const name = 'anon';
     ws.send(JSON.stringify({ type: 'collab_create', name, role: cbSelectedRole }));
   });
+}
+function createDismiss() {
+  document.getElementById('create-overlay').style.display = 'none';
 }
 
 function edEnterCollabMode(code) {
