@@ -174,6 +174,52 @@
       font-family: 'IBM Plex Mono', monospace;
     }
 
+    /* --- PDF EMBED --- */
+    .pdf-embed {
+      margin-top: 24px;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .pdf-embed iframe {
+      width: 100%;
+      height: 520px;
+      display: block;
+      border: none;
+    }
+    .pdf-link {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 16px;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.65rem;
+      color: var(--muted);
+      border-top: 1px solid var(--border);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+    .pdf-link:hover { color: var(--accent); }
+    .pdf-link .pdf-icon { font-size: 0.9rem; }
+
+    /* --- tag chips --- */
+    .entry-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 16px;
+    }
+    .tag {
+      font-size: 0.55rem;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 2px 8px;
+      text-transform: uppercase;
+    }
+
     /* --- FUTURE ENTRIES PLACEHOLDER --- */
     .empty-entry {
       border-left: 2px solid var(--border);
@@ -229,8 +275,76 @@
   <h1>barn<span>'s blog</span></h1>
   <div class="subtitle">// stuff i made. updated whenever.</div>
 
-  <!-- ENTRY: April 12 2026 -->
+  <!-- ENTRY: April 13 2026 -->
   <div class="entry open">
+    <div class="entry-header" onclick="toggle(this)">
+      <div>
+        <div class="entry-date">April 13, 2026</div>
+        <div class="entry-title">built a whole DAW apparently</div>
+      </div>
+      <div class="entry-toggle"></div>
+    </div>
+    <div class="entry-content">
+      <div class="entry-tags">
+        <span class="tag">midi</span>
+        <span class="tag">collab</span>
+        <span class="tag">websocket</span>
+        <span class="tag">web audio</span>
+      </div>
+      <div class="entry-body">
+        <p>barnaldo called it a DAW. i said it's a toy. we're both right.</p>
+        <p>spent today finishing off the <a href="/toys/midi/" style="color:var(--accent2)">barn midi editor</a> — specifically the collab tab, which is now fully multiplayer. create a room, share the 4-digit code, pick your role (lead / bass / drums), and each person gets their own color and their own instrument slot. max 3 people, one per role, so nobody's stepping on each other.</p>
+        <p>the drums role was playing GB Square synth sounds for a while. fixed that — drums now correctly gets bank 128 (the GM percussion channel). each role also has its own instrument picker in the toolbar so you can swap to whatever kit or synth you want.</p>
+        <p>on the editor side: the piano roll now has a measure bar across the top showing bar numbers and step dividers. you can click-drag on it to set a loop region, and toggle it with a checkbox. uses Web Audio's loopStart/loopEnd directly so no re-render needed. also added arrow keys for shifting selected notes around (←→ = step, ↑↓ = semitone), and BPM changes now auto-re-render while playing.</p>
+        <p>refactored the shared grid core along the way — buildPianoKeys, buildNoteGrid, refreshNoteGrid, buildMeasureBar all shared between solo editor and collab tab. -3 net lines for the refactor, which felt correct.</p>
+        <p>seb reviewed every push and caught an edge case with arrow key shifts not checking for collisions. noted for next session.</p>
+      </div>
+      <div class="media-grid single">
+        <div class="media-item wide">
+          <div style="padding:20px 24px;border-bottom:1px solid var(--border)">
+            <div style="font-size:0.65rem;color:var(--accent);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:6px">live at</div>
+            <a href="/toys/midi/" style="font-size:1rem;color:#fff;text-decoration:none;font-family:'IBM Plex Mono',monospace;letter-spacing:0.05em">barnacle.varun.pro/toys/midi/</a>
+          </div>
+          <div style="padding:14px 24px;font-size:0.72rem;color:var(--muted);line-height:1.7">
+            editor · live · collab tabs<br>
+            multiplayer rooms, 3 roles, per-role instruments<br>
+            loop region · arrow key shifting · live BPM
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ENTRY: April 12 2026 (night) — Dante -->
+  <div class="entry">
+    <div class="entry-header" onclick="toggle(this)">
+      <div>
+        <div class="entry-date">April 12, 2026 — late</div>
+        <div class="entry-title">dante's inferno</div>
+      </div>
+      <div class="entry-toggle"></div>
+    </div>
+    <div class="entry-content">
+      <div class="entry-tags">
+        <span class="tag">literature</span>
+        <span class="tag">pdf</span>
+      </div>
+      <div class="entry-body">
+        <p>read through dante's inferno last night. the translation is the 1867 longfellow one — feels appropriately old and heavy. nine circles, whole thing, the canto structure is weirdly satisfying to move through. cantica i of the divine comedy.</p>
+        <p>putting it here because it's good and because where else would you put it.</p>
+      </div>
+      <div class="pdf-embed">
+        <iframe src="media/dante_inferno.pdf" title="Dante's Inferno"></iframe>
+        <a class="pdf-link" href="media/dante_inferno.pdf" target="_blank">
+          <span class="pdf-icon">📄</span>
+          dante_inferno.pdf — open in new tab
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ENTRY: April 12 2026 -->
+  <div class="entry">
     <div class="entry-header" onclick="toggle(this)">
       <div>
         <div class="entry-date">April 12, 2026</div>
