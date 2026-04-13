@@ -3942,7 +3942,8 @@ async function radioInit() {
     document.getElementById('radio-btn-shuffle').classList.add('active');
     radioRenderSidebar();
     radioShuffle();
-    radioPlayTrack();
+    // don't autoplay — show idle state, wait for user to pick a track
+    radioDrawIdle();
   } catch(e) {
     document.getElementById('radio-loading').textContent = 'failed to load tracks :(';
     radioInited = false;
@@ -4232,6 +4233,55 @@ function radioPlayTrack() {
     const nextIdx = radioQueue[(radioQueueIdx + 1) % radioQueue.length];
     if (nextIdx !== undefined) radioLoadNotes(radioTracks[nextIdx]);
   });
+}
+
+function radioDrawIdle() {
+  const canvas = document.getElementById('radio-canvas');
+  if (!canvas) return;
+  const W = canvas.clientWidth || canvas.width;
+  const H = canvas.clientHeight || canvas.height;
+  if (!W || !H) { requestAnimationFrame(radioDrawIdle); return; }
+  canvas.width  = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d');
+
+  // bg
+  ctx.fillStyle = '#080c10';
+  ctx.fillRect(0, 0, W, H);
+
+  // splash if loaded
+  if (radioSplash && radioSplash.complete) {
+    const aspect = radioSplash.width / radioSplash.height;
+    const dh = H * 0.6, dw = dh * aspect;
+    ctx.globalAlpha = 0.06;
+    ctx.drawImage(radioSplash, (W - dw) / 2, (H - dh) / 2, dw, dh);
+    ctx.globalAlpha = 1;
+  }
+
+  // prompt box
+  const msg  = 'pick a tune →';
+  const pad  = 14;
+  ctx.font   = '11px IBM Plex Mono, monospace';
+  const tw   = ctx.measureText(msg).width;
+  const bw   = tw + pad * 2;
+  const bh   = 28;
+  const bx   = (W - bw) / 2;
+  const by   = (H - bh) / 2;
+
+  ctx.fillStyle   = '#0e1318';
+  ctx.strokeStyle = '#c8a84b44';
+  ctx.lineWidth   = 1;
+  ctx.beginPath();
+  ctx.roundRect(bx, by, bw, bh, 4);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle  = '#c8a84b';
+  ctx.textAlign  = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(msg, W / 2, H / 2);
+  ctx.textAlign    = 'left';
+  ctx.textBaseline = 'alphabetic';
 }
 
 function radioComputeLayout(W, H, track) {
