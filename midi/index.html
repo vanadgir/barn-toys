@@ -955,6 +955,10 @@
       </div>
       <button class="ed-btn primary" id="cb-play-btn" onclick="cbPlay()">▶ play</button>
       <button class="ed-btn stop" id="cb-stop-btn" onclick="cbStop()">■ stop</button>
+      <label style="display:flex;align-items:center;gap:4px;font-family:'IBM Plex Mono',monospace;font-size:0.55rem;color:var(--muted);cursor:pointer;margin-left:6px;white-space:nowrap">
+        <input type="checkbox" id="cb-loop-toggle" style="cursor:pointer;accent-color:var(--accent)">
+        loop
+      </label>
       <div class="ed-sep"></div>
       <button class="ed-btn danger" onclick="cbClearAll()">clear all</button>
       <div class="ed-sep"></div>
@@ -1026,6 +1030,7 @@
       </button>
     </div>
     <button class="ed-btn primary" onclick="joinConfirm()" style="width:100%">join</button>
+    <button class="ed-btn" onclick="joinDismiss()" style="width:100%;margin-top:-8px;color:var(--muted)">go solo instead</button>
     <div class="cb-error" id="join-error"></div>
   </div>
 </div>
@@ -2654,11 +2659,21 @@ function cbRefreshGrid() {
   refreshNoteGrid(cbNotes, cbCellMap, n => n.user_idx ?? 0);
 }
 
+let cbReRenderTimer = null;
 function cbApplyNote(action, note, step, duration, velocity, user_idx) {
   cbNotes = cbNotes.filter(n => !(n.note === note && n.step === step));
   if (action === 'add') cbNotes.push({ note, step, duration: duration || 1, velocity: velocity || 90, user_idx: user_idx || 0 });
   cbRefreshGrid();
   document.getElementById('ed-note-count').textContent = cbNotes.length;
+  // if playing, debounce a re-render so new notes get picked up
+  if (cbIsPlaying && wsReady) {
+    clearTimeout(cbReRenderTimer);
+    cbReRenderTimer = setTimeout(() => {
+      if (cbIsPlaying && cbNotes.length > 0) {
+        ws.send(JSON.stringify({ type: 'collab_play', action: 'play' }));
+      }
+    }, 600);
+  }
 }
 
 function cbUpdateUsers(users) {
@@ -2756,13 +2771,15 @@ async function cbReceiveAudio(audioB64, bpm, steps, stepBeats) {
   try {
     const buf = await ctx.decodeAudioData(b64ToArrayBuffer(audioB64));
     const src = ctx.createBufferSource();
+    const cbLooping = document.getElementById('cb-loop-toggle')?.checked ?? true;
     src.buffer = buf;
-    src.loop = true;
+    src.loop = cbLooping;
     src.connect(gainNode || ctx.destination);
     src.start();
     cbAudioSource = src;
     cbIsPlaying = true;
-    document.getElementById('ed-status').textContent = 'playing';
+    document.getElementById('ed-status').textContent = cbLooping ? 'playing ↺' : 'playing';
+    src.onended = () => { if (!cbLooping) cbStopPlayback(); };
     // animate playhead
     const loopSecs  = steps * stepBeats * (60 / bpm);
     const totalPx   = steps * 40;
@@ -2772,7 +2789,9 @@ async function cbReceiveAudio(audioB64, bpm, steps, stepBeats) {
       ph.style.display = 'block';
       function animCb() {
         if (!cbIsPlaying || !cbAudioSource) { ph.style.display = 'none'; return; }
-        const elapsed = (ctx.currentTime - startTime) % loopSecs;
+        const elapsed = cbLooping
+          ? (ctx.currentTime - startTime) % loopSecs
+          : Math.min(ctx.currentTime - startTime, loopSecs);
         ph.style.left = (elapsed / loopSecs * totalPx) + 'px';
         requestAnimationFrame(animCb);
       }
@@ -3018,6 +3037,14 @@ function joinConfirm() {
   ensureWS(() => {
     ws.send(JSON.stringify({ type: 'collab_join', name, code, role: joinSelectedRole }));
   });
+}
+
+function joinDismiss() {
+  document.getElementById('join-overlay').style.display = 'none';
+  // strip ?room= from URL so it doesn't re-trigger on reload
+  const url = new URL(location.href);
+  url.searchParams.delete('room');
+  history.replaceState(null, '', url.toString());
 }
 
 function initFromURL() {
