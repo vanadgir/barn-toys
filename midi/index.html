@@ -4220,8 +4220,7 @@ function radioPlayTrack() {
     audio.play().then(() => {
       if (ppBtn) ppBtn.textContent = '⏸';
     }).catch(() => {
-      // autoplay blocked — stay on ▶, user will click to start
-      radioUserPaused = true;
+      // autoplay blocked — stay on ▶, but don't set radioUserPaused so tab switching still resumes
     });
   }
   audio.addEventListener('ended', () => { if (!radioLoopMode) radioNext(); });
