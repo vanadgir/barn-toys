@@ -2657,9 +2657,11 @@ function cbPreviewNote(midi) {
   const ctx  = getEdCtx();
   const dest = edGainNode || ctx.destination;
   if (cbMyRole === 'drums') {
-    // white noise burst, filtered by note range
-    // kick(<40)=lowpass thump, snare(40-45)=bandpass crack, hihat(46+)=highpass hiss
-    const dur    = midi < 40 ? 0.18 : 0.10;
+    // white noise burst, filtered by GM drum map ranges
+    // 35-36=kick(lowpass), 37-45=snare/toms(bandpass), 46+=hihat/cymbal(highpass)
+    const isKick = midi <= 36;
+    const isHat  = midi >= 46;
+    const dur    = isKick ? 0.18 : 0.10;
     const bufSz  = Math.ceil(ctx.sampleRate * dur);
     const buf    = ctx.createBuffer(1, bufSz, ctx.sampleRate);
     const data   = buf.getChannelData(0);
@@ -2667,9 +2669,9 @@ function cbPreviewNote(midi) {
     const src    = ctx.createBufferSource();
     src.buffer   = buf;
     const filt   = ctx.createBiquadFilter();
-    if      (midi < 40) { filt.type = 'lowpass';   filt.frequency.value = 180; }
-    else if (midi < 46) { filt.type = 'bandpass';  filt.frequency.value = 900; filt.Q.value = 1.5; }
-    else                { filt.type = 'highpass';  filt.frequency.value = 4000; }
+    if      (isKick) { filt.type = 'lowpass';   filt.frequency.value = 180; }
+    else if (!isHat) { filt.type = 'bandpass';  filt.frequency.value = 900; filt.Q.value = 1.5; }
+    else             { filt.type = 'highpass';  filt.frequency.value = 4000; }
     const gain   = ctx.createGain();
     gain.gain.setValueAtTime(0.5, ctx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
