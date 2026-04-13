@@ -1,0 +1,146 @@
+[
+  {
+    "id": "boss_fight_v3",
+    "title": "boss fight v3",
+    "ogg": "bossfight_v3.ogg",
+    "bpm": 170.0,
+    "duration": 57.71,
+    "channel": "barn",
+    "radio": false
+  },
+  {
+    "id": "cloud_drift",
+    "title": "cloud drift",
+    "ogg": "cloud_drift.ogg",
+    "bpm": 64.0,
+    "duration": 90.0,
+    "channel": "barn",
+    "radio": true
+  },
+  {
+    "id": "dank_battle_theme_3",
+    "title": "dank battle theme 3",
+    "ogg": "dank_battle_theme_3.ogg",
+    "bpm": 230.8,
+    "duration": 50.66,
+    "channel": "barn",
+    "radio": false
+  },
+  {
+    "id": "day_is_going",
+    "title": "day is going",
+    "ogg": "day_is_going.ogg",
+    "bpm": 88.0,
+    "duration": 27.84,
+    "channel": "barn",
+    "radio": false
+  },
+  {
+    "id": "godzilla_shreds",
+    "title": "godzilla shreds",
+    "ogg": "godzilla_shreds.ogg",
+    "bpm": 148.0,
+    "duration": 22.4,
+    "channel": "barn",
+    "radio": false
+  },
+  {
+    "id": "guy_who_bought_elden_ring_cuz_his_friend_said_it_was_easy",
+    "title": "guy who bought elden ring cuz his friend said it was easy",
+    "ogg": "elden_ring_clean.ogg",
+    "bpm": 72,
+    "duration": 53.3,
+    "channel": "barn",
+    "radio": true
+  },
+  {
+    "id": "morning_ditty",
+    "title": "morning ditty",
+    "ogg": "morning_ditty.ogg",
+    "bpm": 76.0,
+    "duration": 71.53,
+    "channel": "barn",
+    "radio": false
+  },
+  {
+    "id": "pizza_battle",
+    "title": "pizza battle",
+    "ogg": "pizza_battle.ogg",
+    "bpm": 148.0,
+    "duration": 12.7,
+    "channel": "barn",
+    "radio": false
+  },
+  {
+    "id": "3842_remix",
+    "title": "3842 remix",
+    "ogg": "3842_remix.ogg",
+    "bpm": 145.0,
+    "duration": 16.84,
+    "channel": "barn",
+    "radio": false
+  },
+  {
+    "id": "boss_fight_80s",
+    "title": "boss fight 80s",
+    "ogg": "bossfight_80s.ogg",
+    "bpm": 148.0,
+    "duration": 22.5,
+    "channel": "barn",
+    "radio": false
+  },
+  {
+    "id": "boss_fight_v2",
+    "title": "boss fight v2",
+    "ogg": "bossfight_v2.ogg",
+    "bpm": 158.0,
+    "duration": 74.35,
+    "channel": "barn",
+    "radio": false
+  },
+  {
+    "id": "dank_battle_theme_2",
+    "title": "dank battle theme 2",
+    "ogg": "dank_battle_theme_2.ogg",
+    "bpm": 150.0,
+    "duration": 119.98,
+    "channel": "barn",
+    "radio": true
+  },
+  {
+    "id": "seb_barn",
+    "title": "seb + barn",
+    "ogg": "seb_plus_barn.ogg",
+    "bpm": 120.0,
+    "duration": 4.0,
+    "channel": "barn",
+    "radio": false
+  },
+  {
+    "id": "seb_wook_barn",
+    "title": "seb wook + barn",
+    "ogg": "seb_wook_plus_barn.ogg",
+    "bpm": 95,
+    "duration": 20.83,
+    "channel": "barn",
+    "radio": true
+  },
+  {
+    "id": "good_song_2",
+    "title": "good song 2",
+    "ogg": "good_song2.ogg",
+    "bpm": 128,
+    "duration": 97.48,
+    "channel": "barn",
+    "radio": true
+  },
+  {
+    "id": "good_song_2_lofi",
+    "title": "good song 2 (lofi)",
+    "ogg": "lofi_version.ogg",
+    "bpm": 82,
+    "duration": 117.08,
+    "channel": "barn",
+    "radio": true
+  }
+]

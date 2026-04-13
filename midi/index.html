@@ -3940,15 +3940,12 @@ async function radioInit() {
   if (radioInited) { return; }
   radioInited = true;
   try {
-    const res = await fetch(RADIO_BASE + 'tracks.json');
+    // load tiny metadata only (~3KB) — notes fetch per-track on demand
+    const res = await fetch(RADIO_BASE + 'tracks-meta.json');
     const allTracks = await res.json();
     radioTracks = allTracks.filter(t => t.radio);
-    // precompute pitch range per track so it's not done every frame
-    radioTracks.forEach(t => {
-      const ps = t.notes.map(n => n.p);
-      t._minP = Math.max(0,   Math.min(...ps) - 2);
-      t._maxP = Math.min(127, Math.max(...ps) + 2);
-    });
+    // notes start null, loaded lazily
+    radioTracks.forEach(t => { t.notes = null; t._notesLoading = false; });
     document.getElementById('radio-loading').style.display = 'none';
     document.getElementById('radio-btn-shuffle').classList.add('active');
     radioRenderSidebar();
@@ -3957,6 +3954,35 @@ async function radioInit() {
   } catch(e) {
     document.getElementById('radio-loading').textContent = 'failed to load tracks :(';
     radioInited = false;
+  }
+}
+
+async function radioLoadNotes(track) {
+  if (track.notes !== null || track._notesLoading) return;
+  track._notesLoading = true;
+  try {
+    const res = await fetch(RADIO_BASE + 'notes/' + track.id + '.json');
+    const notes = await res.json();
+    track.notes = notes;
+    track._notesLoading = false;
+    if (notes.length > 0) {
+      const ps = notes.map(n => n.p);
+      track._minP = Math.max(0,   Math.min(...ps) - 2);
+      track._maxP = Math.min(127, Math.max(...ps) + 2);
+    } else {
+      track._minP = 48; track._maxP = 72;
+    }
+    // if this is the active track, reset layout so it recomputes with real pitch range
+    if (track === radioTrack) radioLayout = null;
+    // update note count in header
+    if (track === radioTrack) {
+      const metaEl = document.getElementById('radio-meta');
+      if (metaEl) metaEl.textContent = `${Math.round(track.bpm)} bpm · ${notes.length} notes`;
+    }
+  } catch(e) {
+    track._notesLoading = false;
+    track.notes = [];  // empty fallback so we don't retry forever
+    track._minP = 48; track._maxP = 72;
   }
 }
 
@@ -4135,11 +4161,13 @@ function radioPlayTrack() {
   radioTrack = track;
 
   document.getElementById('radio-title').textContent = track.title;
-  document.getElementById('radio-meta').textContent = `${Math.round(track.bpm)} bpm · ${track.notes.length} notes`;
+  const noteCount = track.notes ? track.notes.length : '…';
+  document.getElementById('radio-meta').textContent = `${Math.round(track.bpm)} bpm · ${noteCount} notes`;
   document.getElementById('radio-progress-fill').style.width = '0%';
   document.getElementById('radio-time').textContent = '0:00 / 0:00';
   radioUpdateSidebarActive();
 
+  // start audio immediately — no need to wait for notes
   const audio = new Audio(RADIO_BASE + track.ogg.replace(/ /g, '%20'));
   audio.volume = Math.min(1, parseFloat(document.getElementById('radio-vol')?.value ?? 0.8));
   radioAudio = audio;
@@ -4151,6 +4179,12 @@ function radioPlayTrack() {
   audio.addEventListener('ended', () => { if (!radioLoopMode) radioNext(); });
 
   if (!document.hidden) radioAnimFrame = requestAnimationFrame(radioDraw);
+
+  // async: load notes for this track, then pre-fetch the next one
+  radioLoadNotes(track).then(() => {
+    const nextIdx = radioQueue[(radioQueueIdx + 1) % radioQueue.length];
+    if (nextIdx !== undefined) radioLoadNotes(radioTracks[nextIdx]);
+  });
 }
 
 function radioComputeLayout(W, H, track) {
@@ -4182,6 +4216,21 @@ function radioDraw() {
     canvas.height = H;
     radioLayout   = null;  // force recompute on resize
   }
+  // notes not loaded yet — draw a simple loading state and keep animating
+  if (!radioTrack.notes) {
+    const ctx2 = canvas.getContext('2d');
+    ctx2.clearRect(0, 0, W, H);
+    ctx2.fillStyle = '#080c10';
+    ctx2.fillRect(0, 0, W, H);
+    ctx2.fillStyle = '#555e68';
+    ctx2.font = '12px IBM Plex Mono, monospace';
+    ctx2.textAlign = 'center';
+    ctx2.fillText('loading…', W / 2, H / 2);
+    ctx2.textAlign = 'left';
+    radioAnimFrame = requestAnimationFrame(radioDraw);
+    return;
+  }
+
   if (!radioLayout) radioLayout = radioComputeLayout(W, H, radioTrack);
 
   const ctx   = canvas.getContext('2d');
