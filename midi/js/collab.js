@@ -772,12 +772,12 @@ async function shareConfirm(mode) {
     const res = overwrite
       ? await fetch(MIDI_SAVE_BASE + '/update/' + currentId, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer bArNLiKeADaPiZzA' },
           body: JSON.stringify({ state, name }),
         })
       : await fetch(MIDI_SAVE_BASE + '/save', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer bArNLiKeADaPiZzA' },
           body: JSON.stringify({ state, name }),
         });
     if (!res.ok) throw new Error('server error');
