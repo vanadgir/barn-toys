@@ -1423,7 +1423,7 @@
         <span class="radio-vol-label">vol</span>
         <input class="radio-vol-slider" id="radio-vol" type="range" min="0" max="1.15" step="0.01" value="0.8" oninput="radioSetVol(this.value)">
       </div>
-      <button class="radio-btn" id="radio-btn-playpause" onclick="radioTogglePlay()">⏸</button>
+      <button class="radio-btn" id="radio-btn-playpause" onclick="radioTogglePlay()">▶</button>
       <button class="radio-btn" id="radio-btn-loop" onclick="radioToggleLoop()">loop</button>
       <button class="radio-btn" id="radio-btn-shuffle" onclick="radioToggleShuffle()">shuffle</button>
       <button class="radio-btn" onclick="radioNext()">next →</button>
@@ -4171,11 +4171,18 @@ function radioPlayTrack() {
   const audio = new Audio(RADIO_BASE + track.ogg.replace(/ /g, '%20'));
   audio.volume = Math.min(1, parseFloat(document.getElementById('radio-vol')?.value ?? 0.8));
   radioAudio = audio;
-  if (!document.hidden) audio.play().catch(() => {});
   audio.loop = radioLoopMode;
   radioUserPaused = false;
   const ppBtn = document.getElementById('radio-btn-playpause');
-  if (ppBtn) ppBtn.textContent = '⏸';
+  if (ppBtn) ppBtn.textContent = '▶';  // default to paused until play() confirms
+  if (!document.hidden) {
+    audio.play().then(() => {
+      if (ppBtn) ppBtn.textContent = '⏸';
+    }).catch(() => {
+      // autoplay blocked — stay on ▶, user will click to start
+      radioUserPaused = true;
+    });
+  }
   audio.addEventListener('ended', () => { if (!radioLoopMode) radioNext(); });
 
   if (!document.hidden) radioAnimFrame = requestAnimationFrame(radioDraw);
