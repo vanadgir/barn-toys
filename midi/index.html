@@ -2781,6 +2781,10 @@ function buildCbKeys() {
   const el = document.getElementById('ed-keys');
   if (!el) return;
   while (el.firstChild) el.removeChild(el.firstChild);
+  // spacer to match the 16px measure bar at top of ed-roll-inner
+  const spacer = document.createElement('div');
+  spacer.style.cssText = 'height:16px;flex-shrink:0;border-bottom:1px solid rgba(75,139,200,0.2);background:#111120;';
+  el.appendChild(spacer);
   const isDrums = cbMyRole === 'drums';
   const labelFn = isDrums
     ? midi => ({ text: GM_DRUM[midi]?.[0] ?? '?', title: GM_DRUM[midi]?.[1] ?? `Note ${midi}` })
