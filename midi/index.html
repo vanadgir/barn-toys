@@ -617,7 +617,7 @@
         order: 2;
       }
 
-      #radio-canvas { order: 1; flex: 1; min-height: 0; width: 100%; }
+      .radio-canvas-wrap { order: 1; flex: 1; min-height: 0; }
 
       .radio-track-item { min-height: 38px; font-size: 0.66rem; padding-right: 12px; }
       .radio-track-toggle { width: 40px; min-height: 38px; font-size: 0.85rem; }
@@ -674,10 +674,36 @@
     }
     .radio-track-item.active .radio-track-dur { color: var(--muted); }
 
-    #radio-canvas {
+    .radio-canvas-wrap {
       flex: 1;
-      display: block;
+      position: relative;
       min-width: 0;
+      min-height: 0;
+      overflow: hidden;
+    }
+    #radio-canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+    .radio-idle-overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+    }
+    .radio-idle-overlay.hidden { display: none; }
+    .radio-idle-msg {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.7rem;
+      color: var(--accent);
+      background: var(--bg2);
+      border: 1px solid rgba(200,168,75,0.28);
+      border-radius: 4px;
+      padding: 6px 14px;
+      letter-spacing: 0.04em;
     }
 
     .radio-loading {
@@ -1421,7 +1447,12 @@
       <div class="radio-sidebar" id="radio-sidebar">
         <div class="radio-loading" id="radio-loading" style="padding:20px;text-align:center">loading…</div>
       </div>
-      <canvas id="radio-canvas"></canvas>
+      <div class="radio-canvas-wrap">
+        <canvas id="radio-canvas"></canvas>
+        <div class="radio-idle-overlay" id="radio-idle-overlay">
+          <div class="radio-idle-msg">pick a tune</div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -3940,6 +3971,7 @@ async function radioInit() {
     radioRenderSidebar();
     radioShuffle();
     // don't autoplay — show idle state, wait for user to pick a track
+    radioSetIdleOverlay(true);
     radioDrawIdle();
   } catch(e) {
     document.getElementById('radio-loading').textContent = 'failed to load tracks :(';
@@ -4205,6 +4237,7 @@ function radioPlayTrack() {
   document.getElementById('radio-progress-fill').style.width = '0%';
   document.getElementById('radio-time').textContent = '0:00 / 0:00';
   radioUpdateSidebarActive();
+  radioSetIdleOverlay(false);
 
   // start audio immediately — no need to wait for notes
   const audio = new Audio(RADIO_BASE + track.ogg.replace(/ /g, '%20'));
@@ -4232,6 +4265,11 @@ function radioPlayTrack() {
   });
 }
 
+function radioSetIdleOverlay(visible) {
+  const el = document.getElementById('radio-idle-overlay');
+  if (el) el.classList.toggle('hidden', !visible);
+}
+
 function radioStop() {
   if (radioAnimFrame) { cancelAnimationFrame(radioAnimFrame); radioAnimFrame = null; }
   if (radioAudio) { radioAudio.pause(); radioAudio.src = ''; radioAudio = null; }
@@ -4245,6 +4283,7 @@ function radioStop() {
   const ppBtn = document.getElementById('radio-btn-playpause');
   if (ppBtn) ppBtn.textContent = '▶';
   document.querySelectorAll('.radio-track-item').forEach(el => el.classList.remove('active'));
+  radioSetIdleOverlay(true);
   radioDrawIdle();
 }
 
@@ -4257,12 +4296,8 @@ function radioDrawIdle() {
   canvas.width  = W;
   canvas.height = H;
   const ctx = canvas.getContext('2d');
-
-  // bg
   ctx.fillStyle = '#080c10';
   ctx.fillRect(0, 0, W, H);
-
-  // splash — same as playing state
   if (radioSplash && radioSplash.complete) {
     const aspect = radioSplash.width / radioSplash.height;
     const dh = H, dw = dh * aspect;
@@ -4270,31 +4305,6 @@ function radioDrawIdle() {
     ctx.drawImage(radioSplash, (W - dw) / 2, 0, dw, dh);
     ctx.globalAlpha = 1;
   }
-
-  // prompt box
-  const msg  = 'pick a tune';
-  const pad  = 14;
-  ctx.font   = '11px IBM Plex Mono, monospace';
-  const tw   = ctx.measureText(msg).width;
-  const bw   = tw + pad * 2;
-  const bh   = 28;
-  const bx   = (W - bw) / 2;
-  const by   = (H - bh) / 2;
-
-  ctx.fillStyle   = '#0e1318';
-  ctx.strokeStyle = 'rgba(200,168,75,0.28)';
-  ctx.lineWidth   = 1;
-  ctx.beginPath();
-  ctx.roundRect(bx, by, bw, bh, 4);
-  ctx.fill();
-  ctx.stroke();
-
-  ctx.fillStyle    = '#c8a84b';
-  ctx.textAlign    = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(msg, W / 2, H / 2);
-  ctx.textAlign    = 'left';
-  ctx.textBaseline = 'alphabetic';
 }
 
 function radioComputeLayout(W, H, track) {
@@ -4373,9 +4383,8 @@ function radioDraw() {
   if (radioSplash && radioSplash.complete) {
     const aspect = radioSplash.width / radioSplash.height;
     const dh = H, dw = dh * aspect;
-    const dx = pianoW + (gridW - dw) / 2;
     ctx.globalAlpha = 0.08;
-    ctx.drawImage(radioSplash, dx, 0, dw, dh);
+    ctx.drawImage(radioSplash, (W - dw) / 2, 0, dw, dh);
     ctx.globalAlpha = 1;
   }
 
