@@ -1830,7 +1830,11 @@ function toggleSolo(idx, e) {
 
 // ── build editor piano keys ───────────────────────────────────────────────────
 function buildEdKeys() {
-  buildPianoKeys(document.getElementById('ed-keys'), edPreviewNote);
+  const el = document.getElementById('ed-keys');
+  buildPianoKeys(el, edPreviewNote);
+  const spacer = document.createElement('div');
+  spacer.style.cssText = 'height:16px;flex-shrink:0;border-bottom:1px solid rgba(75,139,200,0.2);background:#111120;';
+  el.insertBefore(spacer, el.firstChild);
 }
 
 // ── build editor grid ─────────────────────────────────────────────────────────
