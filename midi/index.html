@@ -1439,6 +1439,7 @@
         <button class="radio-btn" onclick="radioStop()" title="stop">■</button>
         <button class="radio-btn" id="radio-btn-loop" onclick="radioToggleLoop()" title="loop">⟳</button>
         <button class="radio-btn" id="radio-btn-shuffle" onclick="radioToggleShuffle()" title="shuffle">⇄</button>
+        <button class="radio-btn" id="radio-btn-flats" onclick="radioToggleFlats()" title="toggle sharps/flats">#</button>
         <button class="radio-btn" onclick="radioNext()" title="next">⏭</button>
       </div>
       <div class="radio-progress" id="radio-progress-bar"><div class="radio-progress-fill" id="radio-progress-fill"></div></div>
@@ -3933,6 +3934,7 @@ function toggleMute() {
 
 const RADIO_BASE     = '../tunes/';
 const RADIO_CH_COLORS = ['#c8a84b','#4b8bc8','#5ca87a','#c8604b','#a04bc8','#c8c84b','#4bc8c8','#c84b8b'];
+const NOTE_NAMES_FLAT  = ['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B'];
 
 let radioTracks    = null;
 let radioQueue     = [];
@@ -3945,9 +3947,14 @@ let radioLoopMode    = false;
 let radioShuffleMode = true;
 let radioDisabled    = new Set();   // set of track indices excluded from queue
 let radioUserPaused  = false;       // true if user explicitly hit pause
+let radioUseFlats    = false;       // note label accidental style: false=sharps, true=flats
 // cached per-track layout (recomputed on resize or track change)
 let radioLayout    = null;
 let radioSplash    = null;  // splash Image element
+let radioCtx       = null;  // cached 2d context — avoid getContext every frame
+let radioCanvas    = null;  // cached canvas element
+let radioCanvasW   = 0;     // desired dimensions tracked by ResizeObserver
+let radioCanvasH   = 0;
 
 // load splash once
 (function() {
@@ -3959,6 +3966,28 @@ let radioSplash    = null;  // splash Image element
 async function radioInit() {
   if (radioInited) { return; }
   radioInited = true;
+
+  // cache canvas + 2d context, track size via ResizeObserver
+  const canvas = document.getElementById('radio-canvas');
+  if (canvas) {
+    radioCanvas = canvas;
+    radioCtx = canvas.getContext('2d');
+    radioCanvasW = canvas.clientWidth;
+    radioCanvasH = canvas.clientHeight;
+    // don't assign canvas.width here — radioDraw handles it to avoid blank frames
+    new ResizeObserver(entries => {
+      for (const e of entries) {
+        const w = Math.round(e.contentRect.width);
+        const h = Math.round(e.contentRect.height);
+        if (w !== radioCanvasW || h !== radioCanvasH) {
+          radioCanvasW = w; radioCanvasH = h;
+          // only invalidate layout — canvas.width assigned in radioDraw (same frame as redraw)
+          radioLayout = null;
+        }
+      }
+    }).observe(canvas);
+  }
+
   try {
     // load tiny metadata only (~3KB) — notes fetch per-track on demand
     const res = await fetch(RADIO_BASE + 'tracks-meta.json');
@@ -3985,14 +4014,17 @@ async function radioLoadNotes(track) {
   try {
     const res = await fetch(RADIO_BASE + 'notes/' + track.id + '.json');
     const notes = await res.json();
+    // sort by start time so we can binary-search for visible range each frame
+    notes.sort((a, b) => a.t - b.t);
     track.notes = notes;
     track._notesLoading = false;
     if (notes.length > 0) {
       const ps = notes.map(n => n.p);
       track._minP = Math.max(0,   Math.min(...ps) - 2);
       track._maxP = Math.min(127, Math.max(...ps) + 2);
+      track._maxDur = notes.reduce((mx, n) => Math.max(mx, n.d), 0);
     } else {
-      track._minP = 48; track._maxP = 72;
+      track._minP = 48; track._maxP = 72; track._maxDur = 4;
     }
     // if this is the active track, reset layout so it recomputes with real pitch range
     if (track === radioTrack) radioLayout = null;
@@ -4071,9 +4103,9 @@ document.addEventListener('visibilitychange', () => {
   if (!radioAudio) return;
   if (document.hidden) {
     radioAudio.pause();
-    if (radioAnimFrame) { cancelAnimationFrame(radioAnimFrame); radioAnimFrame = null; }
+    // don't kill RAF — let it idle so canvas redraws instantly on return
   } else {
-    radioAudio.play().catch(() => {});
+    if (!radioUserPaused) radioAudio.play().catch(() => {});
     if (!radioAnimFrame) radioAnimFrame = requestAnimationFrame(radioDraw);
   }
 });
@@ -4089,7 +4121,8 @@ function radioTogglePlay() {
   } else {
     radioUserPaused = true;
     radioAudio.pause();
-    if (radioAnimFrame) { cancelAnimationFrame(radioAnimFrame); radioAnimFrame = null; }
+    // keep RAF loop alive so canvas stays visible while paused
+    if (!radioAnimFrame) radioAnimFrame = requestAnimationFrame(radioDraw);
     if (btn) btn.textContent = '▶';
   }
 }
@@ -4113,6 +4146,12 @@ function radioToggleShuffle() {
   // rebuild queue from current track position
   const curIdx = radioTrack ? radioTracks.indexOf(radioTrack) : -1;
   radioRebuildQueue(curIdx);
+}
+
+function radioToggleFlats() {
+  radioUseFlats = !radioUseFlats;
+  const btn = document.getElementById('radio-btn-flats');
+  if (btn) { btn.textContent = radioUseFlats ? '♭' : '#'; btn.classList.toggle('active', radioUseFlats); }
 }
 
 function radioToggleTrack(trackIdx, e) {
@@ -4325,35 +4364,38 @@ function radioComputeLayout(W, H, track) {
 }
 
 function radioDraw() {
-  const canvas = document.getElementById('radio-canvas');
-  if (!canvas || !radioTrack) return;
+  if (!radioTrack) return;
 
-  const W = canvas.clientWidth;
-  const H = canvas.clientHeight;
+  const W = radioCanvasW;
+  const H = radioCanvasH;
   if (!W || !H) { radioAnimFrame = requestAnimationFrame(radioDraw); return; }
+
+  const ctx    = radioCtx;
+  const canvas = radioCanvas;
+  if (!ctx || !canvas) { radioAnimFrame = requestAnimationFrame(radioDraw); return; }
+
+  // apply any pending resize here — clear + redraw happen in the same frame, no blank flash
   if (canvas.width !== W || canvas.height !== H) {
     canvas.width  = W;
     canvas.height = H;
-    radioLayout   = null;  // force recompute on resize
+    radioLayout   = null;
   }
+
   // notes not loaded yet — draw a simple loading state and keep animating
   if (!radioTrack.notes) {
-    const ctx2 = canvas.getContext('2d');
-    ctx2.clearRect(0, 0, W, H);
-    ctx2.fillStyle = '#080c10';
-    ctx2.fillRect(0, 0, W, H);
-    ctx2.fillStyle = '#555e68';
-    ctx2.font = '12px IBM Plex Mono, monospace';
-    ctx2.textAlign = 'center';
-    ctx2.fillText('loading…', W / 2, H / 2);
-    ctx2.textAlign = 'left';
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#080c10';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#555e68';
+    ctx.font = '12px IBM Plex Mono, monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('loading…', W / 2, H / 2);
+    ctx.textAlign = 'left';
     radioAnimFrame = requestAnimationFrame(radioDraw);
     return;
   }
 
   if (!radioLayout) radioLayout = radioComputeLayout(W, H, radioTrack);
-
-  const ctx   = canvas.getContext('2d');
   const audio = radioAudio;
   const track = radioTrack;
   const L     = radioLayout;
@@ -4415,22 +4457,47 @@ function radioDraw() {
   }
   ctx.globalAlpha = 1;
 
-  // ── build active pitch set this frame (O(n) once, not per-key) ──
+  // ── binary search helpers for sorted notes ──
+  // find first note whose start time >= threshold
+  const bsFind = (arr, threshold) => {
+    let lo = 0, hi = arr.length;
+    while (lo < hi) { const m = (lo + hi) >> 1; arr[m].t < threshold ? lo = m + 1 : hi = m; }
+    return lo;
+  };
+  // visible window: notes that START before visEnd and END after visStart
+  // since notes are sorted by .t, start scanning from first note with t >= (visStart - maxNoteDur)
+  // use a conservative lookback of visSec to catch long notes that started before visStart
+  const scanStart = bsFind(track.notes, visStart - visSec);
+  const scanEnd   = bsFind(track.notes, visEnd + 0.001);
+
+  // ── build active pitch set this frame ──
+  // look back by maxDur so long notes that started before visStart are still caught
+  const maxDur = track._maxDur || visSec;
+  const activeScanStart = bsFind(track.notes, currentSec - maxDur);
+  const activeScanEnd   = bsFind(track.notes, currentSec + 0.001);
   const activePitchColor = new Map(); // pitch -> color
-  track.notes.forEach(note => {
-    if (note.t <= currentSec && (note.t + note.d) >= currentSec) {
+  const activePitchLabel = new Map(); // pitch -> short label string
+  const _noteNames = radioUseFlats ? NOTE_NAMES_FLAT : NOTE_NAMES;
+  for (let i = activeScanStart; i < activeScanEnd; i++) {
+    const note = track.notes[i];
+    if ((note.t + note.d) >= currentSec) {
       const ch = note.ch === 9 ? 7 : (note.ch % 8);
       activePitchColor.set(note.p, RADIO_CH_COLORS[ch]);
+      const lbl = note.ch === 9
+        ? (GM_DRUM[note.p] ? GM_DRUM[note.p][0] : `D${note.p}`)
+        : _noteNames[note.p % 12] + (Math.floor(note.p / 12) - 1);
+      activePitchLabel.set(note.p, lbl);
     }
-  });
+  }
 
   // ── notes ──
   ctx.shadowBlur = 0;
-  track.notes.forEach(note => {
+  for (let i = scanStart; i < scanEnd; i++) {
+    const note = track.notes[i];
     const nx  = timeToX(note.t);
     const nw  = Math.max(2, (note.d / visSec) * gridW);
     // skip notes fully outside visible range
-    if (nx + nw < pianoW || nx > W) return;
+    if (nx + nw < pianoW || nx > W) continue;
 
     const noteEndSec = note.t + note.d;
     const isActive   = note.t <= currentSec && noteEndSec >= currentSec;
@@ -4443,7 +4510,7 @@ function radioDraw() {
     const drawX = Math.max(pianoW, nx);
     const drawR = Math.min(nx + nw - 1, W);
     const drawW = drawR - drawX;
-    if (drawW <= 0) return;
+    if (drawW <= 0) continue;
 
     ctx.globalAlpha = isPast ? 0.28 : 1.0;
 
@@ -4461,7 +4528,7 @@ function radioDraw() {
       ctx.fillStyle  = col;
       ctx.fillRect(drawX, ny + 1, drawW, rowH - 2);
     }
-  });
+  }
   ctx.globalAlpha = 1;
   ctx.shadowBlur  = 0;
 
@@ -4487,11 +4554,17 @@ function radioDraw() {
     const isC      = p % 12 === 0;
     const y        = pitchToY(p);
     if (y + rowH < 0 || y > H) continue;
-    const activeCol = activePitchColor.get(p);
+    const activeCol   = activePitchColor.get(p);
+    const activeLabel = activePitchLabel.get(p);
     ctx.fillStyle = activeCol || (isBlack ? '#080e14' : '#121c26');
     ctx.fillRect(2, y + 1, pianoW - 8, rowH - 1);
-    if (isC && rowH >= 6) {
-      ctx.fillStyle = activeCol ? '#fff' : '#2a3f55';
+    if (activeLabel && rowH >= 7) {
+      // active key: show note/drum label in white
+      ctx.fillStyle = '#fff';
+      ctx.fillText(activeLabel, pianoW - 4, y + rowH - 1);
+    } else if (isC && rowH >= 6) {
+      // inactive: only label C notes as usual
+      ctx.fillStyle = '#2a3f55';
       ctx.fillText(`C${Math.floor(p / 12) - 1}`, pianoW - 4, y + rowH - 1);
     }
   }
