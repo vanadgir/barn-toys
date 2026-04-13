@@ -843,7 +843,6 @@
 <div class="tab-bar">
   <button class="tab-btn active" id="tab-editor-btn" onclick="switchTab('editor')">editor</button>
   <button class="tab-btn" id="tab-live-btn" onclick="switchTab('live')">live</button>
-  <button class="tab-btn" id="tab-collab-btn" onclick="switchTab('collab')">collab</button>
 </div>
 
 <div class="note-tip" id="note-tip">
@@ -891,7 +890,7 @@
   <div class="editor-panel">
 
     <!-- toolbar -->
-    <div class="ed-toolbar">
+    <div class="ed-toolbar" id="ed-solo-toolbar">
       <div class="ed-group">
         <span class="ed-label">bpm</span>
         <input type="number" id="ed-bpm" class="ed-input" min="60" max="220" value="120">
@@ -938,6 +937,43 @@
       <button class="ed-btn" onclick="edExportMidi()">export .mid</button>
       <button class="ed-btn" onclick="document.getElementById('ed-import-file').click()">import .mid</button>
       <input type="file" id="ed-import-file" accept=".mid,.midi" onchange="edImportMidi(this)">
+      <div class="ed-sep"></div>
+      <button class="ed-btn" id="ed-collab-btn" onclick="edStartCollab()">⇄ collab</button>
+    </div>
+
+    <!-- collab toolbar (shown when in a room) -->
+    <div class="ed-toolbar" id="ed-collab-toolbar" style="display:none">
+      <div class="ed-group">
+        <span class="ed-label">room</span>
+        <span class="cb-room-code-label" id="ed-room-code"></span>
+        <button class="ed-btn" onclick="edCopyLink()" style="font-size:0.5rem;padding:2px 6px">copy link</button>
+      </div>
+      <div class="ed-sep"></div>
+      <div class="ed-group">
+        <span class="ed-label">bpm</span>
+        <input type="number" id="cb-bpm" class="ed-input" min="40" max="280" value="120" onchange="cbSendBpm()">
+      </div>
+      <button class="ed-btn primary" id="cb-play-btn" onclick="cbPlay()">▶ play</button>
+      <button class="ed-btn stop" id="cb-stop-btn" onclick="cbStop()">■ stop</button>
+      <div class="ed-sep"></div>
+      <button class="ed-btn danger" onclick="cbClearAll()">clear all</button>
+      <div class="ed-sep"></div>
+      <div class="ed-group">
+        <span class="ed-label">role</span>
+        <div class="cb-role-switch" id="cb-role-switch"></div>
+      </div>
+      <div class="ed-sep"></div>
+      <div class="ed-group" id="cb-inst-group">
+        <span class="ed-label">sound</span>
+        <select class="ed-track-sf-sel" id="cb-inst-sf" onchange="cbInstSfChange()">
+          <option value="pokemon">Pokemon</option>
+          <option value="megadrive">Megadrive</option>
+        </select>
+        <select class="ed-track-inst-sel" id="cb-inst-prog" onchange="cbInstProgChange()"></select>
+      </div>
+      <div class="ed-sep"></div>
+      <button class="ed-btn" onclick="edLeaveCollab()">leave</button>
+      <div class="cb-users-wrap" id="cb-users"></div>
     </div>
 
     <!-- track list -->
@@ -964,104 +1000,33 @@
   </div>
 </div>
 
-<!-- ═══ COLLAB TAB ═══ -->
-<div class="tab-panel" id="panel-collab">
-  <div class="editor-panel">
-
-    <!-- lobby (pre-room) -->
-    <div class="cb-lobby" id="cb-lobby">
-      <div class="cb-lobby-inner">
-        <div class="cb-lobby-title">collab session</div>
-        <div class="cb-lobby-row">
-          <span class="ed-label">name</span>
-          <input id="cb-name-input" class="ed-input" placeholder="your name" style="width:130px;cursor:text" maxlength="20">
-        </div>
-        <!-- role picker -->
-        <div class="cb-roles" id="cb-roles">
-          <button class="cb-role-btn" id="cb-role-btn-lead" onclick="cbSelectRole('lead')">
-            <span class="cb-role-icon">♪</span>
-            <span class="cb-role-name">lead</span>
-            <span class="cb-role-user" id="cb-role-user-lead"></span>
-          </button>
-          <button class="cb-role-btn" id="cb-role-btn-bass" onclick="cbSelectRole('bass')">
-            <span class="cb-role-icon">♩</span>
-            <span class="cb-role-name">bass</span>
-            <span class="cb-role-user" id="cb-role-user-bass"></span>
-          </button>
-          <button class="cb-role-btn" id="cb-role-btn-drums" onclick="cbSelectRole('drums')">
-            <span class="cb-role-icon">♦</span>
-            <span class="cb-role-name">drums</span>
-            <span class="cb-role-user" id="cb-role-user-drums"></span>
-          </button>
-        </div>
-        <div class="cb-lobby-row" style="gap:16px">
-          <button class="ed-btn primary" onclick="cbCreate()">create room</button>
-          <div style="display:flex;gap:6px;align-items:center">
-            <input id="cb-code-input" class="ed-input" placeholder="0000"
-              style="width:60px;text-align:center;letter-spacing:0.2em;cursor:text" maxlength="4"
-              oninput="cbCodeChanged()">
-            <button class="ed-btn" onclick="cbJoin()">join</button>
-          </div>
-        </div>
-        <div class="cb-error" id="cb-error"></div>
-      </div>
+<!-- join overlay: shown when URL has ?room=CODE -->
+<div id="join-overlay" style="display:none;position:fixed;inset:0;background:rgba(8,12,16,0.92);z-index:50;display:none;align-items:center;justify-content:center">
+  <div style="display:flex;flex-direction:column;gap:18px;align-items:center;padding:32px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;min-width:320px">
+    <div style="font-size:0.6rem;color:var(--muted);letter-spacing:0.14em;text-transform:uppercase">join room <span id="join-code-display" style="color:var(--accent);font-weight:700;letter-spacing:0.2em"></span></div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <span class="ed-label">name</span>
+      <input id="join-name" class="ed-input" placeholder="your name" style="width:130px;cursor:text" maxlength="20">
     </div>
-
-    <!-- room view (post-join) -->
-    <div class="cb-room" id="cb-room" style="display:none">
-
-      <!-- toolbar -->
-      <div class="ed-toolbar">
-        <div class="ed-group">
-          <span class="ed-label">room</span>
-          <span class="cb-room-code-label" id="cb-room-code"></span>
-        </div>
-        <div class="ed-sep"></div>
-        <div class="ed-group">
-          <span class="ed-label">bpm</span>
-          <input type="number" id="cb-bpm" class="ed-input" min="40" max="280" value="120" onchange="cbSendBpm()">
-        </div>
-        <button class="ed-btn primary" id="cb-play-btn" onclick="cbPlay()">▶ play</button>
-        <button class="ed-btn stop" id="cb-stop-btn" onclick="cbStop()">■ stop</button>
-        <div class="ed-sep"></div>
-        <button class="ed-btn danger" onclick="cbClearAll()">clear all</button>
-        <div class="ed-sep"></div>
-        <div class="ed-group">
-          <span class="ed-label">role</span>
-          <div class="cb-role-switch" id="cb-role-switch"></div>
-        </div>
-        <div class="ed-sep"></div>
-        <div class="ed-group" id="cb-inst-group">
-          <span class="ed-label">sound</span>
-          <select class="ed-track-sf-sel" id="cb-inst-sf" onchange="cbInstSfChange()">
-            <option value="pokemon">Pokemon</option>
-            <option value="megadrive">Megadrive</option>
-          </select>
-          <select class="ed-track-inst-sel" id="cb-inst-prog" onchange="cbInstProgChange()"></select>
-        </div>
-        <div class="ed-sep"></div>
-        <button class="ed-btn" onclick="cbLeave()">leave</button>
-        <div class="cb-users-wrap" id="cb-users"></div>
-      </div>
-
-      <!-- piano roll -->
-      <div class="ed-main">
-        <div class="ed-keys" id="cb-keys"></div>
-        <div class="ed-roll-wrap" id="cb-roll-wrap">
-          <div class="ed-roll-inner" id="cb-roll-inner">
-            <div class="ed-playhead" id="cb-playhead"></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- footer -->
-      <div class="ed-ftr">
-        <div>notes: <span id="cb-note-count">0</span></div>
-        <div id="cb-status" style="margin-left:auto"></div>
-      </div>
-
+    <div class="cb-roles" id="join-roles">
+      <button class="cb-role-btn" id="join-role-btn-lead" onclick="joinSelectRole('lead')">
+        <span class="cb-role-icon">♪</span>
+        <span class="cb-role-name">lead</span>
+        <span class="cb-role-user" id="join-role-user-lead"></span>
+      </button>
+      <button class="cb-role-btn" id="join-role-btn-bass" onclick="joinSelectRole('bass')">
+        <span class="cb-role-icon">♩</span>
+        <span class="cb-role-name">bass</span>
+        <span class="cb-role-user" id="join-role-user-bass"></span>
+      </button>
+      <button class="cb-role-btn" id="join-role-btn-drums" onclick="joinSelectRole('drums')">
+        <span class="cb-role-icon">♦</span>
+        <span class="cb-role-name">drums</span>
+        <span class="cb-role-user" id="join-role-user-drums"></span>
+      </button>
     </div>
-
+    <button class="ed-btn primary" onclick="joinConfirm()" style="width:100%">join</button>
+    <div class="cb-error" id="join-error"></div>
   </div>
 </div>
 
@@ -1342,15 +1307,10 @@ function switchTab(tab) {
   activeTab = tab;
   document.getElementById('tab-live-btn').classList.toggle('active', tab === 'live');
   document.getElementById('tab-editor-btn').classList.toggle('active', tab === 'editor');
-  document.getElementById('tab-collab-btn').classList.toggle('active', tab === 'collab');
   document.getElementById('panel-live').classList.toggle('active', tab === 'live');
   document.getElementById('panel-editor').classList.toggle('active', tab === 'editor');
-  document.getElementById('panel-collab').classList.toggle('active', tab === 'collab');
-  // auto-mute live audio when leaving the live tab
   if (tab === 'editor' && !isMuted) toggleMute();
   if (tab === 'live'   &&  isMuted) toggleMute();
-  // build collab grid if switching to it and in a room
-  if (tab === 'collab' && cbInRoom) buildCbGrid(cbSteps);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2135,7 +2095,7 @@ function edUpdateFooter() {
 
 // ── preview note ──────────────────────────────────────────────────────────────
 function edPreviewNote(midi) {
-  if (!wsReady) return;
+  if (!wsReady) { ensureWS(); return; }
   const track = ED_TRACKS[edActiveTrack];
   ws.send(JSON.stringify({
     type: 'preview',
@@ -2150,51 +2110,51 @@ function edPreviewNote(midi) {
 
 // ── play ──────────────────────────────────────────────────────────────────────
 function edPlay() {
-  if (!wsReady) { edSetStatus('not connected'); return; }
   if (edPendingRender) return;
+  ensureWS(() => {
+    const bpm      = parseFloat(document.getElementById('ed-bpm').value) || 120;
+    const steps    = edGetSteps();
+    const stepB    = edGetStepBeats();
 
-  const bpm      = parseFloat(document.getElementById('ed-bpm').value) || 120;
-  const steps    = edGetSteps();
-  const stepB    = edGetStepBeats();
+    // determine which tracks are active (solo logic)
+    const anySolo = ED_TRACKS.some(t => t.solo);
+    const activeTracks = new Set(ED_TRACKS.map((t, i) => i)
+      .filter(i => !ED_TRACKS[i].mute && (!anySolo || ED_TRACKS[i].solo)));
 
-  // determine which tracks are active (solo logic)
-  const anySolo = ED_TRACKS.some(t => t.solo);
-  const activeTracks = new Set(ED_TRACKS.map((t, i) => i)
-    .filter(i => !ED_TRACKS[i].mute && (!anySolo || ED_TRACKS[i].solo)));
+    if (edNotes.length === 0) { edSetStatus('no notes'); return; }
 
-  if (edNotes.length === 0) { edSetStatus('no notes'); return; }
-
-  const sfCounts = {};
-  activeTracks.forEach(i => {
-    sfCounts[ED_TRACKS[i].sf] = (sfCounts[ED_TRACKS[i].sf] || 0) + 1;
-  });
-  // pick dominant sf (most tracks)
-  const sf = Object.entries(sfCounts).sort((a,b) => b[1]-a[1])[0]?.[0] || 'pokemon';
-
-  const notes = edNotes
-    .filter(n => activeTracks.has(n.track))
-    .map(n => {
-      const t = ED_TRACKS[n.track];
-      return {
-        note: n.note,
-        step: n.step,
-        velocity: n.velocity,
-        duration: n.duration,
-        program: t.program,
-        bank: t.bank,
-        layer: n.track,
-      };
+    const sfCounts = {};
+    activeTracks.forEach(i => {
+      sfCounts[ED_TRACKS[i].sf] = (sfCounts[ED_TRACKS[i].sf] || 0) + 1;
     });
+    // pick dominant sf (most tracks)
+    const sf = Object.entries(sfCounts).sort((a,b) => b[1]-a[1])[0]?.[0] || 'pokemon';
 
-  edPendingRender = true;
-  edSetStatus('rendering…');
-  document.getElementById('ed-play-btn').disabled = true;
+    const notes = edNotes
+      .filter(n => activeTracks.has(n.track))
+      .map(n => {
+        const t = ED_TRACKS[n.track];
+        return {
+          note: n.note,
+          step: n.step,
+          velocity: n.velocity,
+          duration: n.duration,
+          program: t.program,
+          bank: t.bank,
+          layer: n.track,
+        };
+      });
 
-  ws.send(JSON.stringify({
-    type: 'render',
-    sf,
-    sequence: { bpm, steps, step_beats: stepB, notes }
-  }));
+    edPendingRender = true;
+    edSetStatus('rendering…');
+    document.getElementById('ed-play-btn').disabled = true;
+
+    ws.send(JSON.stringify({
+      type: 'render',
+      sf,
+      sequence: { bpm, steps, step_beats: stepB, notes }
+    }));
+  });
 }
 
 // ── stop ──────────────────────────────────────────────────────────────────────
@@ -2657,7 +2617,7 @@ function cbGetSpb() {
 }
 
 function buildCbKeys() {
-  const el = document.getElementById('cb-keys');
+  const el = document.getElementById('ed-keys');
   if (!el || el.children.length) return;
   buildPianoKeys(el, null); // display-only in collab (no local preview)
 }
@@ -2667,14 +2627,14 @@ function buildCbGrid(steps) {
   cbBuilt = steps;
   const spb = cbGetSpb();
   buildNoteGrid(
-    document.getElementById('cb-roll-inner'),
+    document.getElementById('ed-roll-inner'),
     steps,
     spb,
     cbCellMap,
-    document.getElementById('cb-playhead'),
+    document.getElementById('ed-playhead'),
     (cell, midi, s) => cell.addEventListener('click', () => cbCellClick(midi, s))
   );
-  buildMeasureBar(document.getElementById('cb-roll-inner'), steps, spb, false);
+  buildMeasureBar(document.getElementById('ed-roll-inner'), steps, spb, false);
   cbRefreshGrid();
 }
 
@@ -2696,7 +2656,7 @@ function cbApplyNote(action, note, step, duration, velocity, user_idx) {
   cbNotes = cbNotes.filter(n => !(n.note === note && n.step === step));
   if (action === 'add') cbNotes.push({ note, step, duration: duration || 1, velocity: velocity || 90, user_idx: user_idx || 0 });
   cbRefreshGrid();
-  document.getElementById('cb-note-count').textContent = cbNotes.length;
+  document.getElementById('ed-note-count').textContent = cbNotes.length;
 }
 
 function cbUpdateUsers(users) {
@@ -2761,10 +2721,6 @@ function cbLeave() {
   cbCellMap.clear();
   cbBuilt = 0;
   cbStopPlayback();
-  document.getElementById('cb-lobby').style.display = '';
-  document.getElementById('cb-room').style.display  = 'none';
-  document.getElementById('cb-note-count').textContent = '0';
-  document.getElementById('cb-status').textContent = '';
 }
 
 function cbSendBpm() {
@@ -2775,7 +2731,7 @@ function cbSendBpm() {
 
 function cbPlay() {
   if (!wsReady || !cbInRoom) return;
-  document.getElementById('cb-status').textContent = 'rendering…';
+  document.getElementById('ed-status').textContent = 'rendering…';
   ws.send(JSON.stringify({ type: 'collab_play', action: 'play' }));
 }
 
@@ -2787,9 +2743,9 @@ function cbStop() {
 function cbStopPlayback() {
   if (cbAudioSource) { try { cbAudioSource.stop(); } catch(e){} cbAudioSource = null; }
   cbIsPlaying = false;
-  const ph = document.getElementById('cb-playhead');
+  const ph = document.getElementById('ed-playhead');
   if (ph) ph.style.display = 'none';
-  document.getElementById('cb-status').textContent = '';
+  document.getElementById('ed-status').textContent = '';
 }
 
 async function cbReceiveAudio(audioB64, bpm, steps, stepBeats) {
@@ -2804,12 +2760,12 @@ async function cbReceiveAudio(audioB64, bpm, steps, stepBeats) {
     src.start();
     cbAudioSource = src;
     cbIsPlaying = true;
-    document.getElementById('cb-status').textContent = 'playing';
+    document.getElementById('ed-status').textContent = 'playing';
     // animate playhead
     const loopSecs  = steps * stepBeats * (60 / bpm);
     const totalPx   = steps * 40;
     const startTime = ctx.currentTime;
-    const ph        = document.getElementById('cb-playhead');
+    const ph        = document.getElementById('ed-playhead');
     if (ph) {
       ph.style.display = 'block';
       function animCb() {
@@ -2820,7 +2776,7 @@ async function cbReceiveAudio(audioB64, bpm, steps, stepBeats) {
       }
       requestAnimationFrame(animCb);
     }
-  } catch(e) { console.error('cb audio:', e); document.getElementById('cb-status').textContent = 'audio error'; }
+  } catch(e) { console.error('cb audio:', e); document.getElementById('ed-status').textContent = 'audio error'; }
 }
 
 function cbClearAll() {
@@ -2874,6 +2830,7 @@ function cbSendInstChange() {
 async function cbHandleMessage(msg) {
   if (msg.type === 'collab_room_info') {
     cbResetRoleBtns(msg.roles);
+    joinResetRoleBtns(msg.roles);  // also update join overlay
     return;
   }
   if (msg.type === 'collab_joined') {
@@ -2891,18 +2848,26 @@ async function cbHandleMessage(msg) {
       Object.assign(cbRoleInstruments, msg.state.instruments);
     }
     document.getElementById('cb-bpm').value = cbBpm;
-    cbShowRoom(msg.code);
+    // update URL
+    const url = new URL(location.href);
+    url.searchParams.set('room', msg.code);
+    history.replaceState(null, '', url.toString());
+    // hide join overlay if showing
+    document.getElementById('join-overlay').style.display = 'none';
+    // enter collab mode in the editor
+    edEnterCollabMode(msg.code);
     cbUpdateUsers(msg.users);
-    buildCbKeys();
-    buildCbGrid(cbSteps);
     cbRefreshGrid();
     cbBuildInstPicker();
-    document.getElementById('cb-note-count').textContent = cbNotes.length;
-    if (activeTab !== 'collab') switchTab('collab');
+    document.getElementById('ed-note-count').textContent = cbNotes.length;
     return;
   }
   if (msg.type === 'collab_error') {
-    document.getElementById('cb-error').textContent = msg.msg;
+    const errEl = document.getElementById('join-error') || document.getElementById('ed-status');
+    if (errEl) errEl.textContent = msg.msg;
+    const collabBtn = document.getElementById('ed-collab-btn');
+    if (collabBtn) collabBtn.textContent = '⇄ collab';
+    edCollabPending = false;
     return;
   }
   if (!cbInRoom) return;
@@ -2945,15 +2910,143 @@ async function cbHandleMessage(msg) {
   if (msg.type === 'collab_clear') {
     cbNotes = [];
     cbRefreshGrid();
-    document.getElementById('cb-note-count').textContent = '0';
+    document.getElementById('ed-note-count').textContent = '0';
     cbStopPlayback();
     return;
   }
 }
 
+// ── collab-in-editor helpers ──────────────────────────────────────────────────
+
+let edCollabPending = false;
+
+function edStartCollab() {
+  if (cbInRoom) return;
+  const btn = document.getElementById('ed-collab-btn');
+  if (btn) btn.textContent = 'connecting…';
+  edCollabPending = true;
+  ensureWS(() => {
+    if (!cbSelectedRole) cbSelectedRole = 'lead';
+    const name = 'anon';
+    ws.send(JSON.stringify({ type: 'collab_create', name, role: cbSelectedRole }));
+  });
+}
+
+function edEnterCollabMode(code) {
+  edCollabPending = false;
+  document.getElementById('ed-solo-toolbar').style.display = 'none';
+  const tracksWrap = document.getElementById('ed-tracks');
+  if (tracksWrap) tracksWrap.style.display = 'none';
+  document.getElementById('ed-collab-toolbar').style.display = '';
+  document.getElementById('ed-room-code').textContent = code;
+  // rebuild grid with collab callbacks
+  cbBuilt = 0;
+  buildCbKeys();
+  buildCbGrid(cbSteps);
+}
+
+function edExitCollabMode() {
+  document.getElementById('ed-collab-toolbar').style.display = 'none';
+  document.getElementById('ed-solo-toolbar').style.display = '';
+  const tracksWrap = document.getElementById('ed-tracks');
+  if (tracksWrap) tracksWrap.style.display = '';
+  const btn = document.getElementById('ed-collab-btn');
+  if (btn) btn.textContent = '⇄ collab';
+  // rebuild editor grid
+  edBuilt = 0;
+  buildEdGrid(edGetSteps());
+  edRefreshGrid();
+  edUpdateFooter();
+}
+
+function edLeaveCollab() {
+  if (!cbInRoom) { edExitCollabMode(); return; }
+  if (wsReady) ws.send(JSON.stringify({ type: 'collab_leave' }));
+  cbInRoom    = false;
+  cbRoomCode  = null;
+  cbNotes     = [];
+  cbCellMap.clear();
+  cbBuilt     = 0;
+  cbStopPlayback();
+  // clear URL param
+  const url = new URL(location.href);
+  url.searchParams.delete('room');
+  history.replaceState(null, '', url.toString());
+  edExitCollabMode();
+}
+
+function edCopyLink() {
+  if (!cbRoomCode) return;
+  const url = new URL(location.href);
+  url.searchParams.set('room', cbRoomCode);
+  navigator.clipboard.writeText(url.toString()).then(() => {
+    const btn = document.querySelector('#ed-collab-toolbar button[onclick="edCopyLink()"]');
+    if (btn) { btn.textContent = 'copied!'; setTimeout(() => btn.textContent = 'copy link', 1500); }
+  });
+}
+
+// ── join overlay (URL-based) ──────────────────────────────────────────────────
+let joinSelectedRole = null;
+
+function joinSelectRole(role) {
+  const btn = document.getElementById(`join-role-btn-${role}`);
+  if (btn && btn.disabled) return;
+  joinSelectedRole = role;
+  CB_ROLES.forEach(r => document.getElementById(`join-role-btn-${r}`)?.classList.toggle('selected', r === role));
+}
+
+function joinResetRoleBtns(roleInfo) {
+  CB_ROLES.forEach(r => {
+    const btn  = document.getElementById(`join-role-btn-${r}`);
+    const user = document.getElementById(`join-role-user-${r}`);
+    if (!btn) return;
+    const taken = !!(roleInfo && roleInfo[r]);
+    btn.disabled = taken;
+    btn.classList.toggle('selected', joinSelectedRole === r && !taken);
+    if (user) user.textContent = taken ? roleInfo[r].name : '';
+    if (taken && joinSelectedRole === r) joinSelectedRole = null;
+  });
+}
+
+function joinConfirm() {
+  if (!joinSelectedRole) { document.getElementById('join-error').textContent = 'pick a role'; return; }
+  const name = document.getElementById('join-name').value.trim() || 'anon';
+  const code = document.getElementById('join-code-display').textContent;
+  document.getElementById('join-error').textContent = '';
+  ensureWS(() => {
+    ws.send(JSON.stringify({ type: 'collab_join', name, code, role: joinSelectedRole }));
+  });
+}
+
+function initFromURL() {
+  const params = new URLSearchParams(location.search);
+  const code   = params.get('room');
+  if (!code) return;
+  const overlay = document.getElementById('join-overlay');
+  overlay.style.display = 'flex';
+  document.getElementById('join-code-display').textContent = code;
+  // fetch room info to show which roles are taken
+  ensureWS(() => {
+    ws.send(JSON.stringify({ type: 'collab_room_info', code }));
+  });
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // WEBSOCKET
 // ─────────────────────────────────────────────────────────────────────────────
+function ensureWS(callback) {
+  if (wsReady) { if (callback) callback(); return; }
+  if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+    connectWS();
+  }
+  if (callback) {
+    const check = setInterval(() => {
+      if (wsReady) { clearInterval(check); callback(); }
+    }, 100);
+    setTimeout(() => clearInterval(check), 8000);
+  }
+}
+
 function connectWS() {
   const wsEl = document.getElementById('ftr-ws');
   wsEl.textContent = 'connecting…';
@@ -3074,7 +3167,7 @@ buildEdKeys();
 buildTrackUI();
 buildEdGrid(edGetSteps());
 edUpdateFooter();
-connectWS();
+initFromURL();
 </script>
 </body>
 </html>
