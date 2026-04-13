@@ -422,64 +422,66 @@
 
     .radio-bar {
       display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 10px 20px;
+      flex-direction: column;
+      padding: 7px 14px 0;
       border-bottom: 1px solid var(--border);
       flex-shrink: 0;
     }
 
+    .radio-bar-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding-bottom: 6px;
+      min-width: 0;
+    }
+
+    .radio-spacer { flex: 1; min-width: 8px; }
+
     .radio-title {
-      font-size: 0.78rem;
+      font-size: 0.76rem;
       font-weight: 700;
       color: #fff;
-      flex: 1;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
       min-width: 0;
+      flex-shrink: 1;
+      max-width: 260px;
     }
 
     .radio-meta {
-      font-size: 0.6rem;
+      font-size: 0.58rem;
       color: var(--muted);
-      letter-spacing: 0.05em;
+      letter-spacing: 0.04em;
       white-space: nowrap;
       flex-shrink: 0;
     }
 
     .radio-btn {
       font-family: 'IBM Plex Mono', monospace;
-      font-size: 0.62rem;
-      letter-spacing: 0.06em;
+      font-size: 0.7rem;
       color: var(--muted);
       background: none;
       border: 1px solid var(--border);
       border-radius: 3px;
-      padding: 3px 10px;
+      padding: 2px 7px;
       cursor: pointer;
       transition: color 0.15s, border-color 0.15s;
       white-space: nowrap;
       flex-shrink: 0;
+      line-height: 1.4;
     }
     .radio-btn:hover { color: var(--text); border-color: var(--muted); }
 
-    .radio-progress-wrap {
-      flex-shrink: 0;
-      width: 160px;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
     .radio-progress {
-      height: 5px;
+      height: 3px;
       background: var(--border);
-      border-radius: 2px;
-      overflow: hidden;
       cursor: pointer;
       transition: height 0.1s;
+      margin: 0 -14px;  /* bleed to bar edges */
     }
-    .radio-progress:hover { height: 7px; }
+    .radio-progress:hover { height: 5px; }
     .radio-progress-fill {
       height: 100%;
       background: var(--accent);
@@ -488,32 +490,23 @@
       pointer-events: none;
     }
     .radio-time {
-      font-size: 0.55rem;
+      font-size: 0.54rem;
       color: var(--muted);
-      letter-spacing: 0.06em;
-      text-align: right;
-    }
-    .radio-btn.active { color: var(--accent); border-color: var(--accent); }
-    .radio-vol-wrap {
-      display: flex;
-      align-items: center;
-      gap: 6px;
+      letter-spacing: 0.05em;
+      white-space: nowrap;
       flex-shrink: 0;
     }
-    .radio-vol-label {
-      font-size: 0.55rem;
-      color: var(--muted);
-      letter-spacing: 0.06em;
-    }
+    .radio-btn.active { color: var(--accent); border-color: var(--accent); }
     .radio-vol-slider {
       -webkit-appearance: none;
       appearance: none;
-      width: 70px;
+      width: 60px;
       height: 3px;
       background: var(--border);
       border-radius: 2px;
       outline: none;
       cursor: pointer;
+      flex-shrink: 0;
     }
     .radio-vol-slider::-webkit-slider-thumb {
       -webkit-appearance: none;
@@ -595,17 +588,13 @@
       }
       .tab-btn { font-size: 0.7rem; padding: 8px 14px; }
 
-      .radio-bar {
-        flex-wrap: wrap;
-        gap: 8px;
-        padding: 10px 14px;
-      }
-      .radio-title { font-size: 0.82rem; order: -1; width: 100%; flex-basis: 100%; }
-      .radio-meta  { font-size: 0.62rem; }
-      .radio-progress-wrap { width: 100%; flex-basis: 100%; order: 1; }
-      .radio-progress { height: 7px; }
-      .radio-progress:hover { height: 9px; }
-      .radio-btn { font-size: 0.68rem; padding: 5px 12px; }
+      .radio-bar { padding: 6px 12px 0; }
+      .radio-bar-row { gap: 6px; padding-bottom: 5px; }
+      .radio-title { max-width: 140px; font-size: 0.72rem; }
+      .radio-meta { display: none; }
+      .radio-btn { font-size: 0.72rem; padding: 3px 8px; }
+      .radio-vol-slider { width: 50px; }
+      .radio-progress { margin: 0 -12px; }
 
       /* radio-wrap and radio-body both need to be full-height columns */
       .radio-wrap { height: 100%; width: 100%; }
@@ -1413,20 +1402,18 @@
 <div class="tab-panel active" id="panel-radio">
   <div class="radio-wrap">
     <div class="radio-bar">
-      <div class="radio-title" id="radio-title">loading…</div>
-      <div class="radio-meta" id="radio-meta"></div>
-      <div class="radio-progress-wrap">
-        <div class="radio-progress" id="radio-progress-bar" onclick="radioSeek(event)"><div class="radio-progress-fill" id="radio-progress-fill"></div></div>
+      <div class="radio-bar-row">
+        <div class="radio-title" id="radio-title">loading…</div>
+        <div class="radio-meta" id="radio-meta"></div>
+        <div class="radio-spacer"></div>
         <div class="radio-time" id="radio-time">0:00 / 0:00</div>
-      </div>
-      <div class="radio-vol-wrap">
-        <span class="radio-vol-label">vol</span>
         <input class="radio-vol-slider" id="radio-vol" type="range" min="0" max="1.15" step="0.01" value="0.8" oninput="radioSetVol(this.value)">
+        <button class="radio-btn" id="radio-btn-playpause" onclick="radioTogglePlay()">▶</button>
+        <button class="radio-btn" id="radio-btn-loop" onclick="radioToggleLoop()" title="loop">⟳</button>
+        <button class="radio-btn" id="radio-btn-shuffle" onclick="radioToggleShuffle()" title="shuffle">⇄</button>
+        <button class="radio-btn" onclick="radioNext()" title="next">⏭</button>
       </div>
-      <button class="radio-btn" id="radio-btn-playpause" onclick="radioTogglePlay()">▶</button>
-      <button class="radio-btn" id="radio-btn-loop" onclick="radioToggleLoop()">loop</button>
-      <button class="radio-btn" id="radio-btn-shuffle" onclick="radioToggleShuffle()">shuffle</button>
-      <button class="radio-btn" onclick="radioNext()">next →</button>
+      <div class="radio-progress" id="radio-progress-bar" onclick="radioSeek(event)"><div class="radio-progress-fill" id="radio-progress-fill"></div></div>
     </div>
     <div class="radio-body">
       <div class="radio-sidebar" id="radio-sidebar">
