@@ -2653,17 +2653,19 @@ function cbGetSpb() {
 }
 
 function cbPreviewNote(midi) {
-  if (!wsReady) return;
-  const inst = (cbMyRole && cbRoleInstruments[cbMyRole]) || { bank: 0, program: 0 };
-  ws.send(JSON.stringify({
-    type: 'preview',
-    note: midi,
-    velocity: 80,
-    duration: 0.6,
-    program: inst.program,
-    bank: inst.bank,
-    sf: cbSf,
-  }));
+  // client-side only — no server roundtrip
+  const ctx = getEdCtx();
+  const freq = 440 * Math.pow(2, (midi - 69) / 12);
+  const osc  = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = 'triangle';
+  osc.frequency.value = freq;
+  gain.gain.setValueAtTime(0.25, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+  osc.connect(gain);
+  gain.connect(edGainNode || ctx.destination);
+  osc.start();
+  osc.stop(ctx.currentTime + 0.5);
 }
 
 function buildCbKeys() {
