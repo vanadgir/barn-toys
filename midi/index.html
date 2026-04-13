@@ -475,13 +475,18 @@
     .radio-btn:hover { color: var(--text); border-color: var(--muted); }
 
     .radio-progress {
-      height: 3px;
+      height: 4px;
       background: var(--border);
       cursor: pointer;
       transition: height 0.1s;
-      margin: 0 -14px;  /* bleed to bar edges */
+      margin: 0 -14px;
+      /* invisible padding above/below for easier click/drag target */
+      padding: 6px 0;
+      background-clip: content-box;
+      box-sizing: content-box;
     }
-    .radio-progress:hover { height: 5px; }
+    .radio-progress:hover,
+    .radio-progress.dragging { height: 6px; }
     .radio-progress-fill {
       height: 100%;
       background: var(--accent);
@@ -1413,7 +1418,7 @@
         <button class="radio-btn" id="radio-btn-shuffle" onclick="radioToggleShuffle()" title="shuffle">⇄</button>
         <button class="radio-btn" onclick="radioNext()" title="next">⏭</button>
       </div>
-      <div class="radio-progress" id="radio-progress-bar" onclick="radioSeek(event)"><div class="radio-progress-fill" id="radio-progress-fill"></div></div>
+      <div class="radio-progress" id="radio-progress-bar"><div class="radio-progress-fill" id="radio-progress-fill"></div></div>
     </div>
     <div class="radio-body">
       <div class="radio-sidebar" id="radio-sidebar">
@@ -4116,17 +4121,66 @@ function radioRebuildQueue(keepAtFront) {
   radioQueueIdx = 0;
 }
 
-function radioSeek(e) {
+function radioSeekToFrac(frac) {
   if (!radioAudio || !radioAudio.duration) return;
-  const bar = document.getElementById('radio-progress-bar');
-  const frac = e.offsetX / bar.clientWidth;
+  frac = Math.max(0, Math.min(1, frac));
   radioAudio.currentTime = frac * radioAudio.duration;
-  // snap progress fill immediately, skip transition for responsiveness
   const fill = document.getElementById('radio-progress-fill');
   fill.style.transition = 'none';
   fill.style.width = (frac * 100).toFixed(1) + '%';
   requestAnimationFrame(() => { fill.style.transition = ''; });
 }
+
+// progress bar drag
+(function() {
+  let dragging = false;
+  function fracFromEvent(e, bar) {
+    const rect = bar.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    return (clientX - rect.left) / rect.width;
+  }
+  document.addEventListener('DOMContentLoaded', () => {});
+  // use a late-binding approach so bar exists
+  function getBar() { return document.getElementById('radio-progress-bar'); }
+  document.addEventListener('mousedown', e => {
+    const bar = getBar();
+    if (!bar || !bar.contains(e.target)) return;
+    e.preventDefault();
+    dragging = true;
+    bar.classList.add('dragging');
+    radioSeekToFrac(fracFromEvent(e, bar));
+  });
+  document.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    const bar = getBar();
+    if (!bar) return;
+    radioSeekToFrac(fracFromEvent(e, bar));
+  });
+  document.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false;
+    const bar = getBar();
+    if (bar) bar.classList.remove('dragging');
+  });
+  document.addEventListener('touchstart', e => {
+    const bar = getBar();
+    if (!bar || !bar.contains(e.target)) return;
+    dragging = true;
+    bar.classList.add('dragging');
+    radioSeekToFrac(fracFromEvent(e, bar));
+  }, { passive: true });
+  document.addEventListener('touchmove', e => {
+    if (!dragging) return;
+    const bar = getBar();
+    if (!bar) return;
+    radioSeekToFrac(fracFromEvent(e, bar));
+  }, { passive: true });
+  document.addEventListener('touchend', () => {
+    dragging = false;
+    const bar = getBar();
+    if (bar) bar.classList.remove('dragging');
+  });
+})();
 
 function radioShuffle() {
   radioRebuildQueue(-1);
