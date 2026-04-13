@@ -962,6 +962,10 @@
       <div class="ed-sep"></div>
       <button class="ed-btn danger" onclick="cbClearAll()">clear all</button>
       <div class="ed-sep"></div>
+      <button class="ed-btn" onclick="cbExportMidi()">export .mid</button>
+      <button class="ed-btn" onclick="document.getElementById('cb-import-file').click()">import .mid</button>
+      <input type="file" id="cb-import-file" accept=".mid,.midi" onchange="cbImportMidi(this)" style="display:none">
+      <div class="ed-sep"></div>
       <div class="ed-group">
         <span class="ed-label">role</span>
         <div class="cb-role-switch" id="cb-role-switch"></div>
@@ -1032,6 +1036,19 @@
     <button class="ed-btn primary" onclick="joinConfirm()" style="width:100%">join</button>
     <button class="ed-btn" onclick="joinDismiss()" style="width:100%;margin-top:-8px;color:var(--muted)">go solo instead</button>
     <div class="cb-error" id="join-error"></div>
+  </div>
+</div>
+
+<!-- collab import confirm overlay -->
+<div id="cb-import-overlay" style="display:none;position:fixed;inset:0;background:rgba(8,12,16,0.92);z-index:51;align-items:center;justify-content:center">
+  <div style="display:flex;flex-direction:column;gap:14px;align-items:center;padding:28px 32px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;min-width:280px;text-align:center">
+    <div style="font-size:0.6rem;color:var(--muted);letter-spacing:0.12em;text-transform:uppercase">import request</div>
+    <div id="cb-import-desc" style="font-size:0.65rem;color:var(--text)"></div>
+    <div id="cb-import-waiting" style="font-size:0.55rem;color:var(--muted)"></div>
+    <div style="display:flex;gap:10px">
+      <button class="ed-btn primary" onclick="cbImportVote(true)">accept</button>
+      <button class="ed-btn danger" onclick="cbImportVote(false)">reject</button>
+    </div>
   </div>
 </div>
 
@@ -2800,6 +2817,50 @@ async function cbReceiveAudio(audioB64, bpm, steps, stepBeats) {
   } catch(e) { console.error('cb audio:', e); document.getElementById('ed-status').textContent = 'audio error'; }
 }
 
+function cbExportMidi() {
+  if (!cbNotes.length) { document.getElementById('ed-status').textContent = 'nothing to export'; return; }
+  const buf  = writeMidi(cbNotes, cbBpm, cbSteps, cbStepBeats);
+  const blob = new Blob([buf], {type: 'audio/midi'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `collab-${cbRoomCode || 'room'}.mid`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function cbImportMidi(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const { bpm, stepBeats, notes } = parseMidi(e.target.result);
+      const maxStep = notes.reduce((m, n) => Math.max(m, n.step + n.duration), 0);
+      let steps = 16;
+      if (maxStep > 16) steps = 32;
+      if (maxStep > 32) steps = 64;
+      const filtered = notes.filter(n => n.note >= NOTE_BOT && n.note <= NOTE_TOP && n.step < steps);
+      if (!wsReady || !cbInRoom) return;
+      ws.send(JSON.stringify({
+        type: 'collab_import_request',
+        data: { notes: filtered, bpm, stepBeats, steps },
+      }));
+    } catch(err) { document.getElementById('ed-status').textContent = 'import parse failed'; }
+  };
+  reader.readAsArrayBuffer(file);
+  input.value = '';
+}
+
+function cbImportVote(accept) {
+  if (!wsReady || !cbInRoom) return;
+  ws.send(JSON.stringify({ type: 'collab_import_vote', accept }));
+  document.getElementById('cb-import-waiting').textContent = accept ? 'waiting for others…' : '';
+  if (!accept) document.getElementById('cb-import-overlay').style.display = 'none';
+  // disable buttons after voting
+  document.querySelectorAll('#cb-import-overlay button').forEach(b => b.disabled = true);
+}
+
 function cbClearAll() {
   if (!wsReady || !cbInRoom) return;
   ws.send(JSON.stringify({ type: 'collab_clear' }));
@@ -2933,6 +2994,35 @@ async function cbHandleMessage(msg) {
     cbRefreshGrid();
     document.getElementById('ed-note-count').textContent = '0';
     cbStopPlayback();
+    return;
+  }
+  if (msg.type === 'collab_import_pending') {
+    const overlay = document.getElementById('cb-import-overlay');
+    document.getElementById('cb-import-desc').textContent =
+      `${msg.requester} wants to import ${msg.note_count} notes — this will overwrite everything`;
+    document.getElementById('cb-import-waiting').textContent = '';
+    document.querySelectorAll('#cb-import-overlay button').forEach(b => b.disabled = false);
+    overlay.style.display = 'flex';
+    return;
+  }
+  if (msg.type === 'collab_import_apply') {
+    document.getElementById('cb-import-overlay').style.display = 'none';
+    cbNotes     = msg.notes || [];
+    cbBpm       = msg.bpm       || cbBpm;
+    cbStepBeats = msg.step_beats || cbStepBeats;
+    cbSteps     = msg.steps     || cbSteps;
+    document.getElementById('cb-bpm').value = cbBpm;
+    cbBuilt = 0;
+    buildCbGrid(cbSteps);
+    cbRefreshGrid();
+    document.getElementById('ed-note-count').textContent = cbNotes.length;
+    cbStopPlayback();
+    document.getElementById('ed-status').textContent = `imported ${cbNotes.length} notes`;
+    return;
+  }
+  if (msg.type === 'collab_import_cancelled') {
+    document.getElementById('cb-import-overlay').style.display = 'none';
+    document.getElementById('ed-status').textContent = `import rejected by ${msg.rejector}`;
     return;
   }
 }
