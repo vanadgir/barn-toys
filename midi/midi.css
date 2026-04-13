@@ -742,6 +742,13 @@ html, body {
     display: none;
   }
 }
+.radio-legend-item.inactive {
+  opacity: 0.25;
+  transition: opacity 0.15s;
+}
+.radio-legend-item {
+  transition: opacity 0.15s;
+}
 .radio-idle-overlay.hidden { display: none; }
 .radio-idle-msg {
   font-family: 'IBM Plex Mono', monospace;

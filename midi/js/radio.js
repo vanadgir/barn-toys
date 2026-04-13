@@ -43,6 +43,7 @@ let radioCtx     = null;  // cached 2d context — avoid getContext every frame
 let radioCanvas  = null;  // cached canvas element
 let radioCanvasW = 0;     // desired dimensions tracked by ResizeObserver
 let radioCanvasH = 0;
+let radioLastActiveChKey = ''; // throttle legend DOM updates
 
 // load splash once
 (function() {
@@ -415,7 +416,7 @@ function radioUpdateLegend(track) {
   const items = entries.map(([ch, name]) => {
     const colorIdx = parseInt(ch) === 9 ? 7 : parseInt(ch) % 8;
     const color = RADIO_CH_COLORS[colorIdx];
-    return `<div class="radio-legend-item">
+    return `<div class="radio-legend-item" data-ch="${ch}">
       <div class="radio-legend-dot" style="background:${color}"></div>
       <span>${name}</span>
     </div>`;
@@ -426,6 +427,7 @@ function radioUpdateLegend(track) {
   </button>` + items;
   el.classList.remove('hidden');
   el.classList.add('collapsed');
+  radioLastActiveChKey = '';
 }
 
 function radioStop() {
@@ -607,6 +609,24 @@ function radioDraw() {
         ? (GM_DRUM[note.p] ? GM_DRUM[note.p][0] : `D${note.p}`)
         : _noteNames[note.p % 12] + (Math.floor(note.p / 12) - 1);
       activePitchLabel.set(note.p, lbl);
+    }
+  }
+
+  // ── update legend active state ──
+  {
+    const activeChSet = new Set();
+    for (let i = activeScanStart; i < activeScanEnd; i++) {
+      const note = track.notes[i];
+      if ((note.t + note.d) >= currentSec) {
+        activeChSet.add(String(note.ch === 9 ? 9 : note.ch % 8));
+      }
+    }
+    const activeChKey = [...activeChSet].sort().join(',');
+    if (activeChKey !== radioLastActiveChKey) {
+      radioLastActiveChKey = activeChKey;
+      document.querySelectorAll('.radio-legend-item[data-ch]').forEach(el => {
+        el.classList.toggle('inactive', !activeChSet.has(el.dataset.ch));
+      });
     }
   }
 
