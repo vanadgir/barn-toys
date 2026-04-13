@@ -2652,12 +2652,26 @@ function cbGetSpb() {
   return Math.round(1 / cbStepBeats) * 2;
 }
 
+function cbPreviewNote(midi) {
+  if (!wsReady) return;
+  const inst = (cbMyRole && cbRoleInstruments[cbMyRole]) || { bank: 0, program: 0 };
+  ws.send(JSON.stringify({
+    type: 'preview',
+    note: midi,
+    velocity: 80,
+    duration: 0.6,
+    program: inst.program,
+    bank: inst.bank,
+    sf: cbSf,
+  }));
+}
+
 function buildCbKeys() {
   const el = document.getElementById('ed-keys');
   if (!el) return;
   // always rebuild — editor may have left click handlers on keys
   while (el.firstChild) el.removeChild(el.firstChild);
-  buildPianoKeys(el, null); // display-only in collab (no local preview)
+  buildPianoKeys(el, cbPreviewNote);
 }
 
 function buildCbGrid(steps) {
