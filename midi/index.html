@@ -3499,7 +3499,7 @@ function connectWS() {
     if (msg.type === 'full_state') {
       applyState(msg, false);
       setStatus(msg.status || 'idle');
-      if (msg.status === 'playing' && msg.audio) {
+      if (msg.status === 'playing' && msg.audio && activeTab === 'live') {
         await livePlayAudio(msg.audio, msg.bpm, msg.steps, msg.step_beats);
       }
       return;
@@ -3518,7 +3518,7 @@ function connectWS() {
     }
 
     if (msg.type === 'audio_ready') {
-      await livePlayAudio(msg.audio, msg.bpm, msg.steps, msg.step_beats);
+      if (activeTab === 'live') await livePlayAudio(msg.audio, msg.bpm, msg.steps, msg.step_beats);
       return;
     }
 
@@ -3541,7 +3541,7 @@ function connectWS() {
       }
 
       // fallback: live tab audio
-      if (msg.bpm && msg.steps && msg.step_beats) {
+      if (msg.bpm && msg.steps && msg.step_beats && activeTab === 'live') {
         await livePlayAudio(msg.data, msg.bpm, msg.steps, msg.step_beats);
       }
       return;
