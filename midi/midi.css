@@ -742,12 +742,12 @@ html, body {
     display: none;
   }
 }
+.radio-legend-item {
+  transition: opacity 0.05s; /* snap up fast when note starts */
+}
 .radio-legend-item.inactive {
   opacity: 0.25;
-  transition: opacity 0.15s;
-}
-.radio-legend-item {
-  transition: opacity 0.15s;
+  transition: opacity 0.6s; /* slow fade when note ends */
 }
 .radio-idle-overlay.hidden { display: none; }
 .radio-idle-msg {
