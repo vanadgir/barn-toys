@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>barn tunes</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #0a0a0f;
+      color: #e0e0e0;
+      font-family: 'Courier New', monospace;
+      min-height: 100vh;
+      padding: 40px 20px;
+    }
+    h1 {
+      font-size: 2rem;
+      color: #7faaff;
+      margin-bottom: 6px;
+      letter-spacing: 2px;
+    }
+    .sub {
+      color: #555;
+      font-size: 0.85rem;
+      margin-bottom: 40px;
+    }
+    .track {
+      background: #12121e;
+      border: 1px solid #222240;
+      border-radius: 8px;
+      padding: 18px 22px;
+      margin-bottom: 16px;
+      transition: border-color 0.2s;
+    }
+    .track:hover {
+      border-color: #4466cc;
+    }
+    .track-name {
+      font-size: 1rem;
+      color: #aac4ff;
+      margin-bottom: 12px;
+      letter-spacing: 0.5px;
+    }
+    audio {
+      width: 100%;
+      height: 32px;
+      accent-color: #4466cc;
+    }
+    audio::-webkit-media-controls-panel {
+      background: #1a1a2e;
+    }
+    .now-playing {
+      color: #7faaff;
+      font-size: 0.75rem;
+      margin-top: 8px;
+      min-height: 14px;
+    }
+    .container {
+      max-width: 680px;
+      margin: 0 auto;
+    }
+    a.back {
+      color: #444;
+      font-size: 0.8rem;
+      text-decoration: none;
+      display: inline-block;
+      margin-bottom: 30px;
+    }
+    a.back:hover { color: #7faaff; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a class="back" href="/toys/">← toys</a>
+    <h1>barn tunes</h1>
+    <p class="sub">made by barn. all midi. all original. most of them are fine.</p>
+
+    <div class="track">
+      <div class="track-name">barnavel banger</div>
+      <audio controls src="barnavel_banger.ogg"></audio>
+    </div>
+
+    <div class="track">
+      <div class="track-name">wenk bday</div>
+      <audio controls src="wenk_bday.ogg"></audio>
+    </div>
+
+    <div class="track">
+      <div class="track-name">bossfight v3</div>
+      <audio controls src="bossfight_v3.ogg"></audio>
+    </div>
+
+    <div class="track">
+      <div class="track-name">cloud drift</div>
+      <audio controls src="cloud_drift.ogg"></audio>
+    </div>
+
+    <div class="track">
+      <div class="track-name">guy who bought elden ring cuz his friend said it was easy</div>
+      <audio controls src="guy who bought elden ring cuz his friend said it was easy.ogg"></audio>
+    </div>
+
+    <div class="track">
+      <div class="track-name">pizza battle</div>
+      <audio controls src="pizza_battle.ogg"></audio>
+    </div>
+
+    <div class="track">
+      <div class="track-name">godzilla shreds</div>
+      <audio controls src="godzilla_shreds.ogg"></audio>
+    </div>
+
+    <div class="track">
+      <div class="track-name">day is going</div>
+      <audio controls src="day_is_going.ogg"></audio>
+    </div>
+
+    <div class="track">
+      <div class="track-name">morning ditty</div>
+      <audio controls src="morning_ditty.ogg"></audio>
+    </div>
+
+    <div class="track">
+      <div class="track-name">dank battle theme 3</div>
+      <audio controls src="dank_battle_theme_3.ogg"></audio>
+    </div>
+
+  </div>
+</body>
+</html>

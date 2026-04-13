@@ -139,7 +139,7 @@ scene.add(water);
 
 // ── ISLAND ─────────────────────────────────────────
 function makeIsland() {
-  const geo = new THREE.CylinderGeometry(4.2, 3.6, 1.4, 36, 8);
+  const geo = new THREE.CylinderGeometry(4.2, 3.6, 1.4, 80, 20);
   const pos = geo.attributes.position;
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i);
@@ -148,39 +148,49 @@ function makeIsland() {
     const r = Math.sqrt(x * x + z * z);
     if (y > -0.3) {
       const bump =
-        Math.sin(x * 1.8 + 0.3) * Math.cos(z * 1.4 + 0.5) * 0.3 +
-        Math.sin(x * 3.1 + z * 2.3) * 0.1 +
-        (Math.random() - 0.5) * 0.08;
+        Math.sin(x * 1.8 + 0.3) * Math.cos(z * 1.4 + 0.5) * 0.28 +
+        Math.sin(x * 3.1 + z * 2.3) * 0.09 +
+        Math.cos(x * 2.5 - z * 1.9 + 1.1) * 0.06;
       const falloff = 1.0 - Math.pow(r / 4.5, 2);
       pos.setY(i, y + bump * Math.max(0, falloff));
     }
   }
   const merged = mergeVertices(geo, 0.001);
   merged.computeVertexNormals();
-  const mat = new THREE.MeshLambertMaterial({ color: 0xd4a045 });
+  const mat = new THREE.MeshPhongMaterial({ color: 0xd4a045, shininess: 4 });
   const mesh = new THREE.Mesh(merged, mat);
   mesh.receiveShadow = true;
   mesh.castShadow = true;
   mesh.position.y = 0.3;
   return mesh;
 }
-scene.add(makeIsland());
+const island = makeIsland();
+scene.add(island);
 
-// small rocks
+// raycast to find the actual island surface height at a given (x, z)
+const _rc = new THREE.Raycaster();
+function islandSurfaceY(x, z) {
+  _rc.set(new THREE.Vector3(x, 10, z), new THREE.Vector3(0, -1, 0));
+  const hits = _rc.intersectObject(island);
+  return hits.length > 0 ? hits[0].point.y : 0.9;
+}
+
+// small rocks — placed flush on the island surface
 function makeRock(x, z, scale = 1) {
-  const geo = new THREE.DodecahedronGeometry(0.22 * scale, 0);
+  const geo = new THREE.DodecahedronGeometry(0.22 * scale, 1);
   const pos = geo.attributes.position;
   for (let i = 0; i < pos.count; i++) {
-    pos.setX(i, pos.getX(i) + (Math.random() - 0.5) * 0.05);
-    pos.setY(i, pos.getY(i) + (Math.random() - 0.5) * 0.05);
-    pos.setZ(i, pos.getZ(i) + (Math.random() - 0.5) * 0.05);
+    pos.setX(i, pos.getX(i) + (Math.random() - 0.5) * 0.04 * scale);
+    pos.setY(i, pos.getY(i) + (Math.random() - 0.5) * 0.04 * scale);
+    pos.setZ(i, pos.getZ(i) + (Math.random() - 0.5) * 0.04 * scale);
   }
   geo.computeVertexNormals();
-  const mat = new THREE.MeshLambertMaterial({ color: 0x8a8070 });
+  const mat = new THREE.MeshPhongMaterial({ color: 0x8a8070, shininess: 12 });
   const mesh = new THREE.Mesh(geo, mat);
-  mesh.position.set(x, 0.8, z);
+  const sy = islandSurfaceY(x, z);
+  mesh.position.set(x, sy + 0.13 * scale, z);
   mesh.castShadow = true;
-  mesh.rotation.set(Math.random(), Math.random(), Math.random());
+  mesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
   return mesh;
 }
 scene.add(makeRock(2.8, 1.5, 1.2));
